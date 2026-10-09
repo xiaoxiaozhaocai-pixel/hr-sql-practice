@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 语境 SQL 练习台（离线单文件）</title>
+<style>
+/*__HR_STYLE__*/
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>HR 语境 SQL 练习台 <span class="sub">离线单文件 · 网页端引擎 SQLite · 零后端</span></h1>
+  <div class="progress">
+    <span id="progress-text">已通过 0 / 0</span>
+    <button id="btn-reset" type="button">重置进度</button>
+  </div>
+</header>
+
+<div id="selfcheck-banner" class="banner banner-error" hidden></div>
+<div id="load-banner" class="banner" hidden></div>
+
+<details class="dialect" open>
+  <summary>方言差异说明（必读）：网页端引擎 = SQLite；权威源 = SQL Server</summary>
+  <ul>
+    <li>取前 N 行：SQL Server 用 <code>TOP n</code>（<code>SELECT TOP 10 ...</code>）；SQLite 用 <code>LIMIT n</code>（写在 <code>ORDER BY</code> 之后）。</li>
+    <li>当前时间：SQL Server 用 <code>GETDATE()</code>；本题库全库禁用动态时间，基准日写死为 <code>2026-06-30</code>，请直接用日期字面量。</li>
+    <li>自增主键：SQL Server 用 <code>IDENTITY(1,1)</code>；SQLite 用 <code>INTEGER PRIMARY KEY AUTOINCREMENT</code>。</li>
+    <li>字符串类型：SQL Server 用 <code>NVARCHAR(n)</code> / <code>VARCHAR(n)</code>；SQLite 统一 <code>TEXT</code>（无长度限制）。</li>
+    <li>字符串拼接：SQL Server 用 <code>+</code>；SQLite 的 <code>+</code> 是数值加法，拼串必须用 <code>||</code>。</li>
+    <li>对象前缀：SQL Server 写法带 <code>dbo.</code> 前缀；SQLite 去掉前缀，直接写表名。</li>
+    <li>空值替换：SQL Server 用 <code>ISNULL(a, b)</code>；SQLite 用 <code>IFNULL(a, b)</code>（通用写法 <code>COALESCE(a, b)</code> 两边都能跑）。</li>
+    <li>字符串比较语义：SQL Server 裸 <code>=</code> 默认忽略大小写与尾空格；SQLite 逐字精确。题干涉及字符串匹配时会要求 <code>UPPER()</code> / <code>TRIM()</code> 或 <code>LIKE</code>。</li>
+    <li>日期：库里日期以 ISO 文本 <code>YYYY-MM-DD</code> 存储，字典序即时间序，可直接用字符串比较。</li>
+  </ul>
+  <p class="note">另有差异：SQL Server 字符串相加 <code>'a' + 'b'</code> 得 <code>'ab'</code>，SQLite 里 <code>'a' + 'b'</code> 得 <code>0</code>（静默错误，务必用 <code>||</code>）；SQL Server 有 <code>CONVERT</code>，SQLite 用 <code>CAST</code> 或 <code>strftime</code>。</p>
+  <p class="authority">权威源 = SQL Server（<code>reference_sql</code>）；网页端可执行引擎 = SQLite（<code>reference_sql_sqlite</code>，判题预期结果由它在同一个库上现场跑出）。两者不一致时以 SQL Server 为准。</p>
+</details>
+
+<main class="layout">
+  <aside class="sidebar">
+    <div class="filters">
+      <label>难度<select id="filter-level"><option value="">全部</option></select></label>
+      <label>业务域<select id="filter-subject"><option value="">全部</option></select></label>
+      <label>标签<select id="filter-tag"><option value="">全部</option></select></label>
+      <label>考点<select id="filter-kp"><option value="">全部</option></select></label>
+      <label>排序<select id="sort-by">
+        <option value="seq">按题号 seq</option>
+        <option value="level">按难度 level</option>
+        <option value="subject">按业务域 subject</option>
+        <option value="knowledge_point">按考点 knowledge_point</option>
+        <option value="tags">按标签 tags</option>
+      </select></label>
+    </div>
+    <ol id="question-list" class="qlist"></ol>
+  </aside>
+
+  <section class="detail">
+    <div id="detail-empty" class="empty">从左侧选择一道题开始练习。</div>
+    <div id="detail-body" hidden>
+      <h2 id="q-title"></h2>
+      <div class="meta" id="q-meta"></div>
+      <div id="ref-review-block" class="warn" hidden></div>
+
+      <h3>业务背景</h3>
+      <p id="q-stem"></p>
+
+      <h3>任务要求</h3>
+      <p id="q-requirement"></p>
+
+      <h3>输出要求</h3>
+      <p id="q-output"></p>
+
+      <h3>提示</h3>
+      <button id="btn-hint" type="button">展开提示</button>
+      <p id="q-hint" hidden></p>
+
+      <h3>你的 SQL</h3>
+      <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
+      <div id="forbidden-warning" class="warn" hidden></div>
+      <div class="actions">
+        <button id="btn-run" type="button">运行</button>
+        <button id="btn-judge" type="button" class="primary">判题</button>
+        <button id="btn-answer" type="button">查看答案</button>
+      </div>
+
+      <div id="verdict" class="verdict" hidden></div>
+
+      <div id="result-block" hidden>
+        <h3>运行结果</h3>
+        <div id="result-note" class="note"></div>
+        <div class="tablewrap"><table id="result-table"></table></div>
+      </div>
+
+      <div id="answer-block" hidden>
+        <h3>参考答案</h3>
+        <p class="note" id="answer-note"></p>
+        <h4>SQL Server 权威写法 <code>reference_sql</code>（仅展示，不执行）</h4>
+        <pre id="answer-mssql"></pre>
+        <h4>SQLite 网页可跑写法 <code>reference_sql_sqlite</code>（判题用它算预期结果）</h4>
+        <pre id="answer-sqlite"></pre>
+      </div>
+
+      <div id="post-pass-block" hidden>
+        <h3>通过后解锁</h3>
+        <h4>易错点 pitfalls</h4>
+        <ul id="q-pitfalls"></ul>
+        <h4>本题方言提示 dialect_note</h4>
+        <p id="q-dialect"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，本页不含内联硬编码题目。全部数据为虚构示例。
+  进度只存在本机浏览器 localStorage，刷新不丢，清空请点「重置进度」。
+</footer>
+
+<script>
+/*__HR_WASM_LOADER__*/
+</script>
+<script>
+window.HR_BOOT = /*__HR_BOOTSTRAP__*/;
+</script>
+<script>
+/*__HR_JUDGE__*/
+</script>
+<script>
+/*__HR_DB__*/
+</script>
+<script>
+/*__HR_APP__*/
+</script>
+</body>
+</html>
