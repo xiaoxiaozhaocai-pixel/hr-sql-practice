@@ -3,77 +3,85 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HR 语境 SQL 练习台（离线单文件）</title>
+<title>DB Quest v2 · HR 语境 SQL 闯关（离线单文件）</title>
 <style>
 /*__HR_STYLE__*/
 </style>
 </head>
 <body>
 <header class="topbar">
-  <h1>HR 语境 SQL 练习台 <span class="sub">离线单文件 · 网页端引擎 SQLite · 零后端</span></h1>
-  <div class="progress">
-    <span id="progress-text">已通过 0 / 0</span>
-    <button id="btn-reset" type="button">重置进度</button>
+  <div class="brand">
+    <span class="logo">DB Quest</span>
+    <span class="sub">HR 语境 SQL 闯关 · v2</span>
+  </div>
+  <div class="stats">
+    <span id="stat-stage" class="stat">第1段 0/5</span>
+    <span id="stat-xp" class="stat">XP 0</span>
+    <span id="stat-hearts" class="stat hearts" title="本关剩余尝试次数">❤❤❤</span>
+    <span id="stat-streak" class="stat" title="连续一次就过">🔥0</span>
+    <span id="stat-goal" class="stat goal">今日 0/3</span>
+    <button id="btn-reset" type="button" class="ghost">重置全部进度</button>
   </div>
 </header>
 
-<div id="selfcheck-banner" class="banner banner-error" hidden></div>
 <div id="load-banner" class="banner" hidden></div>
+<div id="selfcheck-banner" class="banner banner-error" hidden></div>
 
-<details class="dialect" open>
-  <summary>方言差异说明（必读）：网页端引擎 = SQLite；权威源 = SQL Server</summary>
-  <ul>
-    <li>取前 N 行：SQL Server 用 <code>TOP n</code>（<code>SELECT TOP 10 ...</code>）；SQLite 用 <code>LIMIT n</code>（写在 <code>ORDER BY</code> 之后）。</li>
-    <li>当前时间：SQL Server 用 <code>GETDATE()</code>；本题库全库禁用动态时间，基准日写死为 <code>2026-06-30</code>，请直接用日期字面量。</li>
-    <li>自增主键：SQL Server 用 <code>IDENTITY(1,1)</code>；SQLite 用 <code>INTEGER PRIMARY KEY AUTOINCREMENT</code>。</li>
-    <li>字符串类型：SQL Server 用 <code>NVARCHAR(n)</code> / <code>VARCHAR(n)</code>；SQLite 统一 <code>TEXT</code>（无长度限制）。</li>
-    <li>字符串拼接：SQL Server 用 <code>+</code>；SQLite 的 <code>+</code> 是数值加法，拼串必须用 <code>||</code>。</li>
-    <li>对象前缀：SQL Server 写法带 <code>dbo.</code> 前缀；SQLite 去掉前缀，直接写表名。</li>
-    <li>空值替换：SQL Server 用 <code>ISNULL(a, b)</code>；SQLite 用 <code>IFNULL(a, b)</code>（通用写法 <code>COALESCE(a, b)</code> 两边都能跑）。</li>
-    <li>字符串比较语义：SQL Server 裸 <code>=</code> 默认忽略大小写与尾空格；SQLite 逐字精确。题干涉及字符串匹配时会要求 <code>UPPER()</code> / <code>TRIM()</code> 或 <code>LIKE</code>。</li>
-    <li>日期：库里日期以 ISO 文本 <code>YYYY-MM-DD</code> 存储，字典序即时间序，可直接用字符串比较。</li>
-  </ul>
-  <p class="note">另有差异：SQL Server 字符串相加 <code>'a' + 'b'</code> 得 <code>'ab'</code>，SQLite 里 <code>'a' + 'b'</code> 得 <code>0</code>（静默错误，务必用 <code>||</code>）；SQL Server 有 <code>CONVERT</code>，SQLite 用 <code>CAST</code> 或 <code>strftime</code>。</p>
-  <p class="authority">权威源 = SQL Server（<code>reference_sql</code>）；网页端可执行引擎 = SQLite（<code>reference_sql_sqlite</code>，判题预期结果由它在同一个库上现场跑出）。两者不一致时以 SQL Server 为准。</p>
-</details>
+<!-- 首屏常驻方言差异（任务卡要求：不许藏进折叠区） -->
+<div class="dialect-strip">
+  <strong>方言对照（常驻）</strong>
+  <span class="ds-item">网页引擎 = <code>SQLite</code>；权威源 = SQL Server</span>
+  <span class="ds-item"><code>TOP n</code> → <code>LIMIT n</code></span>
+  <span class="ds-item"><code>GETDATE()</code> 禁用，基准日写死 <code>2026-06-30</code></span>
+  <span class="ds-item"><code>dbo.</code> 前缀 → 去掉</span>
+  <span class="ds-item"><code>ISNULL(a,b)</code> → <code>IFNULL/COALESCE</code></span>
+  <span class="ds-item">拼串 <code>+</code> → <code>||</code>（<code>+</code> 会静默得 0）</span>
+  <span class="ds-item"><code>IDENTITY</code> → <code>AUTOINCREMENT</code></span>
+  <span class="ds-item"><code>NVARCHAR</code> → <code>TEXT</code></span>
+  <span class="ds-item">裸 <code>=</code> 忽略大小写 → 逐字精确，需 <code>UPPER/TRIM/LIKE</code></span>
+  <span class="ds-item">日期按 ISO 文本 <code>YYYY-MM-DD</code> 直接比</span>
+</div>
 
 <main class="layout">
   <aside class="sidebar">
-    <div class="filters">
-      <label>难度<select id="filter-level"><option value="">全部</option></select></label>
-      <label>业务域<select id="filter-subject"><option value="">全部</option></select></label>
-      <label>标签<select id="filter-tag"><option value="">全部</option></select></label>
-      <label>考点<select id="filter-kp"><option value="">全部</option></select></label>
-      <label>排序<select id="sort-by">
-        <option value="seq">按题号 seq</option>
-        <option value="level">按难度 level</option>
-        <option value="subject">按业务域 subject</option>
-        <option value="knowledge_point">按考点 knowledge_point</option>
-        <option value="tags">按标签 tags</option>
-      </select></label>
+    <div class="sidebar-head">
+      <span class="sidebar-title">关卡主线</span>
+      <button id="btn-drawer" type="button" class="ghost drawer-btn" aria-expanded="true">收起</button>
     </div>
-    <ol id="question-list" class="qlist"></ol>
+    <nav id="section-nav" class="section-nav"></nav>
+    <p class="sidebar-foot">四段主线，关卡可任意点击跳转，不锁顺序。</p>
   </aside>
 
   <section class="detail">
-    <div id="detail-empty" class="empty">从左侧选择一道题开始练习。</div>
+    <div id="detail-empty" class="empty">从左侧选一关开始闯关。</div>
+
     <div id="detail-body" hidden>
-      <h2 id="q-title"></h2>
+      <div class="level-head">
+        <h2 id="q-title"></h2>
+        <div class="level-hearts" id="q-hearts"></div>
+      </div>
       <div class="meta" id="q-meta"></div>
+
+      <div class="principle">
+        <div class="principle-label">原理 / 考点提示</div>
+        <div id="q-principle"></div>
+      </div>
+
       <div id="ref-review-block" class="warn" hidden></div>
 
-      <h3>业务背景</h3>
-      <p id="q-stem"></p>
+      <h3>任务描述</h3>
+      <p id="q-stem" class="stem"></p>
+      <p id="q-requirement" class="req"></p>
+      <p id="q-output" class="note"></p>
 
-      <h3>任务要求</h3>
-      <p id="q-requirement"></p>
-
-      <h3>输出要求</h3>
-      <p id="q-output"></p>
-
-      <h3>提示</h3>
-      <button id="btn-hint" type="button">展开提示</button>
-      <p id="q-hint" hidden></p>
+      <div class="hint-box">
+        <div class="hint-head">
+          <span>渐进提示 <span id="hint-counter" class="note"></span></span>
+          <button id="btn-hint" type="button">再看一条</button>
+        </div>
+        <ul id="hint-list" class="hint-list"></ul>
+        <div id="hint-empty" class="note">判错会自动解锁下一条提示；也可以手动逐条看。</div>
+      </div>
 
       <h3>你的 SQL</h3>
       <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
@@ -102,7 +110,7 @@
       </div>
 
       <div id="post-pass-block" hidden>
-        <h3>通过后解锁</h3>
+        <h3>过关解锁</h3>
         <h4>易错点 pitfalls</h4>
         <ul id="q-pitfalls"></ul>
         <h4>本题方言提示 dialect_note</h4>
@@ -113,8 +121,9 @@
 </main>
 
 <footer class="foot">
-  题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，本页不含内联硬编码题目。全部数据为虚构示例。
-  进度只存在本机浏览器 localStorage，刷新不丢，清空请点「重置进度」。
+  题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，关卡编排在 <code>src/levels.js</code>，
+  渲染 / 判题 / 存储各自独立。全部数据为虚构示例，与任何真实单位、系统、个人无关。
+  进度只存在本机浏览器 <code>localStorage</code>（键 <code>dbquest.v2</code>），刷新不丢。
 </footer>
 
 <script>
@@ -125,6 +134,9 @@ window.HR_BOOT = /*__HR_BOOTSTRAP__*/;
 </script>
 <script>
 /*__HR_JUDGE__*/
+</script>
+<script>
+/*__HR_LEVELS__*/
 </script>
 <script>
 /*__HR_DB__*/

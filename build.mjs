@@ -72,6 +72,7 @@ function main() {
   html = inject(html, '/*__HR_WASM_LOADER__*/', escapeScriptClose(sqlJsLoader));
   html = inject(html, '/*__HR_BOOTSTRAP__*/', escapeScriptClose(JSON.stringify(bootstrap)));
   html = inject(html, '/*__HR_JUDGE__*/', escapeScriptClose(readText('src/judge.js')));
+  html = inject(html, '/*__HR_LEVELS__*/', escapeScriptClose(readText('src/levels.js')));
   html = inject(html, '/*__HR_DB__*/', escapeScriptClose(readText('src/db.js')));
   html = inject(html, '/*__HR_APP__*/', escapeScriptClose(readText('src/app.js')));
 

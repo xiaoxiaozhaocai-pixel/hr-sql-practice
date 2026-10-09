@@ -1,23 +1,58 @@
 /*
- * src/app.js — UI 逻辑（DOM 操作；数据与判题逻辑分别来自 HR_BOOT 与 HRJudge）
+ * src/app.js — DB Quest v2 界面逻辑（DOM 操作）
  * ---------------------------------------------------------------------------
- * 进度持久化：localStorage（file:// 下同样可用），键 hr-sql-practice:v1。
- * 所有题目文本一律用 textContent 写入，不拼 HTML。
+ * 依赖注入关系（为什么这么分层）：
+ *   HR_BOOT   —— build.mjs 内联进来的权威数据（题库 / DDL / DML / wasm base64）
+ *   HRJudge   —— src/judge.js，纯函数判题引擎；本文件只「接线调用」，绝不改判题口径
+ *   HRLevels  —— src/levels.js，段编排 + 游戏化状态机 + localStorage 读写（纯逻辑）
+ *   HRDb      —— src/db.js，sql.js 加载 / 建库灌数 / 11 表自检 / 跑查询
+ * 本文件只做三件事：把状态渲染成 DOM、把用户动作转成对上述模块的调用、把结果写回状态。
+ *
+ * 进度键 dbquest.v2（v1 练习台的键不复用，避免脏数据）。任何状态变化立即 saveProgress()。
+ * 所有题库文本一律 textContent 写入，不拼 HTML。
  */
 (function () {
   'use strict';
 
   var MAX_PREVIEW_ROWS = 200;   // 运行结果最多渲染 200 行，超出只提示总行数
-  var STORAGE_KEY = 'hr-sql-practice:v1';
   var BOOT = window.HR_BOOT || {};
   var QUESTIONS = Array.isArray(BOOT.questions) ? BOOT.questions : [];
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
+  var L = window.HRLevels;
+
+  var SECTIONS = L ? L.buildSections(QUESTIONS) : [];
+  var QUESTION_BY_ID = {};
+  var SECTION_OF = {};   // 题目 id -> 段
+  SECTIONS.forEach(function (sec) {
+    sec.questions.forEach(function (q) { QUESTION_BY_ID[q.id] = q; SECTION_OF[q.id] = sec; });
+  });
+
+  /* localStorage 不可用（隐私模式 / file:// 策略）时退化成内存 stub，页面照常可玩。 */
+  function safeStorage() {
+    try {
+      var t = '__dbquest_probe__';
+      window.localStorage.setItem(t, '1');
+      window.localStorage.removeItem(t);
+      return window.localStorage;
+    } catch (e) {
+      var mem = {};
+      return {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+        setItem: function (k, v) { mem[k] = String(v); },
+        removeItem: function (k) { delete mem[k]; }
+      };
+    }
+  }
+
+  var storage = safeStorage();
+  var state = L ? L.loadState(storage) : null;
+  if (state) L.ensureDay(state, L.todayStamp());
 
   var db = null;
   var dbReady = false;
+  var refCache = {};          // id -> 参考 SQL 的实跑结果（含是否与 expected.row_count 对账成功）
+  var openSections = {};      // level -> 是否展开
   var currentId = null;
-  var refCache = {};
-  var progress = loadProgress();
 
   /* ------------------------------ 小工具 ------------------------------ */
   function $(id) { return document.getElementById(id); }
@@ -31,198 +66,221 @@
 
   function show(node, on) { if (node) node.hidden = !on; }
 
-  function loadProgress() {
-    try {
-      var raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return {};
-      var obj = JSON.parse(raw);
-      return obj && typeof obj === 'object' ? obj : {};
-    } catch (e) {
-      return {};
-    }
-  }
+  function saveProgress() { if (state) L.saveState(storage, state); }
 
-  function saveProgress() {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
-    } catch (e) {
-      /* 隐私模式 / file:// 受限时静默降级为「仅本次会话有效」 */
-    }
-  }
+  function currentQuestion() { return currentId ? QUESTION_BY_ID[currentId] : null; }
 
-  function entryFor(id) {
-    if (!progress[id] || typeof progress[id] !== 'object') progress[id] = { sql: '', passed: false };
-    return progress[id];
-  }
-
-  function isPassed(id) { return !!(progress[id] && progress[id].passed); }
-
-  function passedCount() {
+  function passedInSection(sec) {
     var n = 0;
-    for (var i = 0; i < QUESTIONS.length; i++) if (isPassed(QUESTIONS[i].id)) n++;
+    sec.questions.forEach(function (q) { if (state.passed[q.id]) n++; });
     return n;
   }
 
-  function currentQuestion() {
-    for (var i = 0; i < QUESTIONS.length; i++) if (QUESTIONS[i].id === currentId) return QUESTIONS[i];
-    return null;
-  }
-
-  function byId(id) { return $(id); }
+  function repeats(ch, n) { var s = ''; for (var i = 0; i < n; i++) s += ch; return s; }
 
   function showBanner(id, text) {
-    var node = byId(id);
+    var node = $(id);
     if (!node) return;
     if (text) { node.textContent = text; node.hidden = false; } else { node.hidden = true; }
   }
 
-  /* ------------------------------ 列表 / 筛选 ------------------------------ */
-  function matchFilters(q) {
-    var lv = byId('filter-level').value;
-    var sub = byId('filter-subject').value;
-    var tag = byId('filter-tag').value;
-    var kp = byId('filter-kp').value;
-    if (lv && String(q.level) !== lv) return false;
-    if (sub && q.subject !== sub) return false;
-    if (kp && q.knowledge_point !== kp) return false;
-    if (tag && (!Array.isArray(q.tags) || q.tags.indexOf(tag) === -1)) return false;
-    return true;
-  }
-
-  function comparator() {
-    var key = byId('sort-by').value;
-    return function (a, b) {
-      var va, vb;
-      if (key === 'level') { va = a.level; vb = b.level; }
-      else if (key === 'subject') { va = a.subject || ''; vb = b.subject || ''; }
-      else if (key === 'knowledge_point') { va = a.knowledge_point || ''; vb = b.knowledge_point || ''; }
-      else if (key === 'tags') { va = (a.tags || []).join(','); vb = (b.tags || []).join(','); }
-      else { va = a.seq; vb = b.seq; }
-      if (va < vb) return -1;
-      if (va > vb) return 1;
-      return (a.seq || 0) - (b.seq || 0);
-    };
-  }
-
-  function fillFilters() {
-    var levels = {}, subjects = {}, tags = {}, kps = {};
-    QUESTIONS.forEach(function (q) {
-      if (q.level !== undefined) levels[q.level] = true;
-      if (q.subject) subjects[q.subject] = true;
-      if (q.knowledge_point) kps[q.knowledge_point] = true;
-      (q.tags || []).forEach(function (t) { tags[t] = true; });
-    });
-    fillSelect('filter-level', Object.keys(levels).sort(), function (v) { return 'L' + v; }, function (v) { return v; });
-    fillSelect('filter-subject', Object.keys(subjects).sort(), null, null);
-    fillSelect('filter-tag', Object.keys(tags).sort(), null, null);
-    fillSelect('filter-kp', Object.keys(kps).sort(), null, null);
-  }
-
-  function fillSelect(id, values, labelFn, valueFn) {
-    var sel = byId(id);
-    if (!sel) return;
-    while (sel.options.length > 1) sel.remove(1);
-    values.forEach(function (v) {
-      var opt = document.createElement('option');
-      opt.value = valueFn ? valueFn(v) : v;
-      opt.textContent = labelFn ? labelFn(v) : v;
-      sel.appendChild(opt);
-    });
-  }
-
-  function renderList() {
-    var list = byId('question-list');
-    if (!list) return;
-    list.textContent = '';
-    var rows = QUESTIONS.filter(matchFilters).sort(comparator());
-    if (!rows.length) {
-      list.appendChild(el('li', '没有符合筛选条件的题目', 'empty'));
-      return;
+  /* 引擎报错 -> 一句人话解释。原样报错仍然完整展示（学习价值），这里只是追加。 */
+  var ERROR_HINTS = [
+    [/no such table|no such view/i, '库里没有这个名字的表：核对表名拼写，HR_ 前缀别丢；本页是 SQLite，表名不带 dbo. 前缀。'],
+    [/no such column/i, '列名不存在：核对列名拼写；SQLite 列名不区分大小写，但错字照样报错。'],
+    [/no such function/i, '函数名不对或本引擎不支持：SQLite 用 IFNULL / CAST / LIMIT，别用 ISNULL / GETDATE / TOP。'],
+    [/misuse of aggregate/i, '聚合函数位置不当：聚合结果不能直接写在 WHERE 里，先 GROUP BY 再用 HAVING，或把聚合放进子查询。'],
+    [/wrong number of arguments/i, '函数参数个数不对：核对这个函数要几个参数。'],
+    [/ambiguous column/i, '列名有歧义：多表 JOIN 时同名列要加表别名前缀，如 a.id / b.id。'],
+    [/syntax error|near "/i, 'SQL 语法有误：常见是漏逗号、关键字拼错、子句顺序不对（SELECT / FROM / WHERE / GROUP BY / HAVING / ORDER BY / LIMIT）。'],
+    [/incomplete input/i, 'SQL 没写完：检查括号与引号是否成对。'],
+    [/GROUP BY/i, '涉及分组：SELECT 里的非聚合列都必须出现在 GROUP BY 中。']
+  ];
+  function explainError(msg) {
+    for (var i = 0; i < ERROR_HINTS.length; i++) {
+      if (ERROR_HINTS[i][0].test(msg)) return ERROR_HINTS[i][1];
     }
-    rows.forEach(function (q) {
-      var li = document.createElement('li');
-      if (q.id === currentId) li.className = 'active';
-      li.appendChild(el('span', '#' + q.seq, 'seq'));
-      li.appendChild(el('span', 'L' + q.level, 'lv'));
-      li.appendChild(el('span', q.title || q.id));
-      if (isPassed(q.id)) li.appendChild(el('span', '\u2713', 'done'));
-      li.addEventListener('click', function () { selectQuestion(q.id); });
-      list.appendChild(li);
+    return '本引擎原样返回了上面的报错；把报错点到的表名 / 列名 / 关键字逐个核对一遍。';
+  }
+
+  /* ------------------------------ 顶栏统计 ------------------------------ */
+  function currentSection() {
+    var q = currentQuestion();
+    if (q && SECTION_OF[q.id]) return SECTION_OF[q.id];
+    return SECTIONS[0] || null;
+  }
+
+  function renderStats() {
+    var sec = currentSection();
+    if (sec) $('stat-stage').textContent = '第' + sec.level + '段 ' + passedInSection(sec) + '/' + sec.questions.length;
+    $('stat-xp').textContent = 'XP ' + state.xp;
+    $('stat-hearts').textContent = repeats('\u2764', state.hearts) + repeats('\u{1F90D}', L.HEARTS_PER_LEVEL - state.hearts);
+    $('stat-streak').textContent = '\u{1F525}' + state.streak;
+    var goal = $('stat-goal');
+    var met = L.goalMet(state);
+    goal.textContent = '今日 ' + Math.min(state.todayCount, state.dailyGoal) + '/' + state.dailyGoal + (met ? ' \u2713' : '');
+    goal.className = 'stat goal' + (met ? ' is-met' : '');
+    var hh = $('q-hearts');
+    if (hh) hh.textContent = '本关心 ' + repeats('\u2764', state.hearts) + repeats('\u{1F90D}', L.HEARTS_PER_LEVEL - state.hearts);
+  }
+
+  /* ------------------------------ 左栏主线 ------------------------------ */
+  function renderNav() {
+    var nav = $('section-nav');
+    if (!nav) return;
+    nav.textContent = '';
+    var activeSec = currentSection();
+
+    SECTIONS.forEach(function (sec) {
+      var isActive = activeSec && activeSec.level === sec.level;
+      if (openSections[sec.level] === undefined) openSections[sec.level] = !!isActive;
+
+      var box = el('div', null, 'section' + (isActive ? ' active' : ''));
+      var head = el('div', null, 'section-head');
+      head.appendChild(el('span', (openSections[sec.level] ? '\u25be ' : '\u25b8 ') + '第' + sec.level + '段 · ' + sec.title));
+      head.appendChild(el('span', passedInSection(sec) + '/' + sec.questions.length, 'sec-count'));
+      head.addEventListener('click', function () {
+        openSections[sec.level] = !openSections[sec.level];
+        renderNav();
+      });
+      box.appendChild(head);
+
+      var ul = el('ul', null, 'levels');
+      ul.hidden = !openSections[sec.level];
+      sec.questions.forEach(function (q) {
+        var li = document.createElement('li');
+        var cls = [];
+        if (q.id === currentId) cls.push('active');
+        if (state.passed[q.id]) cls.push('passed');
+        if (state.wrong[q.id]) cls.push('wrong');
+        if (cls.length) li.className = cls.join(' ');
+        li.appendChild(el('span', '#' + q.seq, 'lv-seq'));
+        var titleWrap = el('span', null, 'lv-title');
+        titleWrap.appendChild(el('span', q.title || q.id));
+        titleWrap.appendChild(el('span', q.knowledge_point || '', 'lv-kp'));
+        li.appendChild(titleWrap);
+        if (state.passed[q.id]) li.appendChild(el('span', '\u2713', 'lv-mark done'));
+        else if (state.wrong[q.id]) li.appendChild(el('span', '\u26a0', 'lv-mark wrong-mark'));
+        li.addEventListener('click', function () { selectLevel(q.id); });
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+      nav.appendChild(box);
     });
   }
 
-  function updateProgressText() {
-    var node = byId('progress-text');
-    if (node) node.textContent = '已通过 ' + passedCount() + ' / ' + QUESTIONS.length;
-  }
-
-  /* ------------------------------ 详情 ------------------------------ */
-  function selectQuestion(id) {
+  function selectLevel(id) {
+    if (!QUESTION_BY_ID[id]) return;
     currentId = id;
-    renderList();
+    state.current = id;
+    var sec = SECTION_OF[id];
+    if (sec) openSections[sec.level] = true;
+    saveProgress();
+    renderNav();
+    renderStats();
     renderDetail();
   }
 
+  /* ------------------------------ 渐进提示 ------------------------------ */
+  function hintTexts(q) { return L.hintList(q); }
+
+  function hintSeen(q) {
+    var list = hintTexts(q);
+    var n = state.hintSeen[q.id] || 0;
+    /* 判错过的关至少解锁第一条（兼容 v1 状态里没有 hintSeen 的情况） */
+    if (state.wrong[q.id] && n === 0 && list.length) n = 1;
+    n = Math.max(0, Math.min(n, list.length));
+    return n;
+  }
+
+  function revealNextHint() {
+    var q = currentQuestion();
+    if (!q) return;
+    var list = hintTexts(q);
+    var n = Math.min(hintSeen(q) + 1, list.length);
+    state.hintSeen[q.id] = n;
+    saveProgress();
+    renderHints(q);
+  }
+
+  function renderHints(q) {
+    var list = hintTexts(q);
+    var seen = hintSeen(q);
+    state.hintSeen[q.id] = seen;
+    var ul = $('hint-list');
+    ul.textContent = '';
+    for (var i = 0; i < seen; i++) ul.appendChild(el('li', list[i]));
+    $('hint-counter').textContent = list.length ? '已解锁 ' + seen + '/' + list.length : '本题未提供提示';
+    show($('hint-empty'), seen === 0 && list.length > 0);
+    var btn = $('btn-hint');
+    btn.disabled = !list.length || seen >= list.length;
+    btn.textContent = seen >= list.length && list.length ? '提示已全部解锁' : '再看一条';
+  }
+
+  /* ------------------------------ 单关渲染 ------------------------------ */
   function renderDetail() {
     var q = currentQuestion();
-    show(byId('detail-empty'), !q);
-    show(byId('detail-body'), !!q);
+    show($('detail-empty'), !q);
+    show($('detail-body'), !!q);
     if (!q) return;
 
-    byId('q-title').textContent = '#' + q.seq + ' ' + (q.title || q.id);
-    var meta = byId('q-meta');
+    $('q-title').textContent = '第' + q.level + '段 · #' + q.seq + ' ' + (q.title || q.id);
+
+    var meta = $('q-meta');
     meta.textContent = '';
-    ['业务域 ' + (q.subject || '-'), '难度 L' + q.level, '考点 ' + (q.knowledge_point || '-')].forEach(function (t) {
-      meta.appendChild(el('span', t));
-    });
+    var parts = ['难度 L' + q.level, '业务域 ' + (q.subject || '-'), '考点 ' + (q.knowledge_point || '-'), 'id ' + q.id];
+    parts.forEach(function (t) { meta.appendChild(el('span', t)); });
+    if (Array.isArray(q.tags) && q.tags.length) meta.appendChild(el('span', '标签 ' + q.tags.join(' / ')));
+
+    var principle = $('q-principle');
+    principle.textContent = '';
+    principle.appendChild(el('div', '主考点：' + (q.knowledge_point || '-')));
     if (Array.isArray(q.secondary_points) && q.secondary_points.length) {
-      meta.appendChild(el('span', '次考点 ' + q.secondary_points.join(' / ')));
+      principle.appendChild(el('div', '次要考点：' + q.secondary_points.join(' / ')));
     }
-    byId('q-stem').textContent = q.stem || '';
-    byId('q-requirement').textContent = q.requirement || '';
-    byId('q-output').textContent = q.output_hint || '';
+    principle.appendChild(el('div', '本题在结果集层面判分：只比跑出来的行与列，不比 SQL 写法。', 'note'));
 
-    var hintBtn = byId('btn-hint');
-    var hint = byId('q-hint');
-    hint.textContent = q.hint || '本题未提供提示。';
-    hint.hidden = true;
-    hintBtn.textContent = '展开提示';
-    hintBtn.disabled = !q.hint;
+    $('q-stem').textContent = q.stem || '';
+    $('q-requirement').textContent = q.requirement || '';
+    $('q-output').textContent = q.output_hint || '';
 
-    var sqlInput = byId('sql-input');
-    sqlInput.value = entryFor(q.id).sql || '';
+    var sqlInput = $('sql-input');
+    sqlInput.value = state.sql[q.id] || '';
     checkForbidden();
 
-    show(byId('verdict'), false);
-    show(byId('result-block'), false);
-    show(byId('answer-block'), false);
+    renderHints(q);
 
-    var post = byId('post-pass-block');
-    show(post, isPassed(q.id));
-    if (isPassed(q.id)) renderPostPass(q);
+    show($('ref-review-block'), false);
+    show($('verdict'), false);
+    show($('result-block'), false);
+    show($('answer-block'), false);
+
+    var post = $('post-pass-block');
+    if (state.passed[q.id]) { renderPostPass(q); show(post, true); } else { show(post, false); }
+    renderStats();
   }
 
   function renderPostPass(q) {
-    var ul = byId('q-pitfalls');
+    var ul = $('q-pitfalls');
     ul.textContent = '';
     (q.pitfalls || []).forEach(function (p) { ul.appendChild(el('li', p)); });
     if (!(q.pitfalls || []).length) ul.appendChild(el('li', '题库未登记易错点。'));
-    byId('q-dialect').textContent = q.dialect_note || '本题未登记方言提示。';
+    $('q-dialect').textContent = q.dialect_note || '本题未登记方言提示。';
   }
 
+  /* forbidden_syntax 命中只警告不阻断（任务卡 §4.8）。 */
   function checkForbidden() {
     var q = currentQuestion();
-    var warn = byId('forbidden-warning');
+    var warn = $('forbidden-warning');
     if (!q || !Array.isArray(q.forbidden_syntax) || !q.forbidden_syntax.length) { show(warn, false); return; }
-    var sql = (byId('sql-input').value || '').toUpperCase();
+    var sql = ($('sql-input').value || '').toUpperCase();
     var hit = q.forbidden_syntax.filter(function (s) {
       var needle = String(s).trim().toUpperCase();
-      if (!needle) return false;
-      /* 'TOP n PERCENT' 这类带占位符的写法退化为取首个词判断，避免误报 */
-      return sql.indexOf(needle) !== -1;
+      return needle && sql.indexOf(needle) !== -1;
     });
     if (hit.length) {
-      warn.textContent = '本题禁用语法命中：' + hit.join('、') + '（仅警告，不阻断提交）。';
+      warn.textContent = '本题禁用语法命中：' + hit.join('、') +
+        '（仅警告，不阻断）。这题在 SQL Server 里该用别的写法；本页仍允许你跑，看看结果差在哪。';
       show(warn, true);
     } else {
       show(warn, false);
@@ -239,7 +297,6 @@
     });
     thead.appendChild(tr);
     table.appendChild(thead);
-
     var tbody = document.createElement('tbody');
     var n = Math.min(rows.length, limit);
     for (var i = 0; i < n; i++) {
@@ -253,18 +310,19 @@
     table.appendChild(tbody);
   }
 
-  function renderVerdict(kind, title, verdict, refColumns) {
-    var box = byId('verdict');
+  function renderVerdict(kind, title, verdict, refColumns, extraNote) {
+    var box = $('verdict');
     box.className = 'verdict ' + kind;
     box.textContent = '';
     box.appendChild(el('div', title));
+    if (extraNote) box.appendChild(el('div', extraNote, 'note'));
     if (verdict) {
       box.appendChild(el('div', verdict.reason, 'note'));
       if (verdict.columnIssue) {
-        var parts = [verdict.columnIssue.message];
-        if (verdict.columnIssue.missing && verdict.columnIssue.missing.length) parts.push('缺失列：' + verdict.columnIssue.missing.join('、'));
-        if (verdict.columnIssue.extra && verdict.columnIssue.extra.length) parts.push('多余列：' + verdict.columnIssue.extra.join('、'));
-        box.appendChild(el('div', parts.join(' '), 'note'));
+        var p = [verdict.columnIssue.message];
+        if (verdict.columnIssue.missing && verdict.columnIssue.missing.length) p.push('缺失列：' + verdict.columnIssue.missing.join('、'));
+        if (verdict.columnIssue.extra && verdict.columnIssue.extra.length) p.push('多余列：' + verdict.columnIssue.extra.join('、'));
+        box.appendChild(el('div', p.join(' '), 'note'));
       }
       box.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
         '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'note'));
@@ -282,7 +340,16 @@
     show(box, true);
   }
 
-  /* ------------------------------ 数据库 ------------------------------ */
+  function renderRunError(msg) {
+    show($('result-block'), false);
+    renderVerdict('fail', 'SQL 执行错误（原样展示）：', {
+      reason: msg, columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: 0, refRowCount: 0
+    }, null, '人话：' + explainError(msg));
+  }
+
+  /* ------------------------------ 数据库 / 参考结果 ------------------------------ */
+  /* 预期结果 = 现场跑 reference_sql_sqlite，不信任写死的结果行；再与 expected.row_count 对账。
+     对不上就打「题库待复核」并跳过判题 —— 把锅算在题库上，不算在学员头上。 */
   function referenceResult(q) {
     if (refCache[q.id] !== undefined) return refCache[q.id];
     var out = { ok: false, error: null, result: null, expectedRowCount: null, mismatch: false };
@@ -309,44 +376,43 @@
   function doRun() {
     if (!requireDb()) return;
     var q = currentQuestion();
-    var sql = byId('sql-input').value;
+    var sql = $('sql-input').value;
     if (!sql.trim()) { renderVerdict('warn', '请先写 SQL。', null, null); return; }
     var res;
     try {
       res = window.HRDb.runQuery(db, sql);
     } catch (e) {
-      show(byId('result-block'), false);
-      renderVerdict('fail', 'SQL 执行错误（原样展示）：', { reason: String(e && e.message ? e.message : e), columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: 0, refRowCount: 0 }, null);
+      renderRunError(String(e && e.message ? e.message : e));
       return;
     }
-    renderTable(byId('result-table'), res.columns, res.rows, MAX_PREVIEW_ROWS);
-    byId('result-note').textContent = '共 ' + res.rows.length + ' 行、' + res.columns.length + ' 列' +
+    renderTable($('result-table'), res.columns, res.rows, MAX_PREVIEW_ROWS);
+    $('result-note').textContent = '共 ' + res.rows.length + ' 行、' + res.columns.length + ' 列' +
       (res.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。');
-    show(byId('result-block'), true);
-    if (q) { entryFor(q.id).sql = sql; saveProgress(); }
+    show($('result-block'), true);
+    if (q) { state.sql[q.id] = sql; saveProgress(); }
   }
 
   function doJudge() {
     if (!requireDb()) return;
     var q = currentQuestion();
     if (!q) return;
-    var sql = byId('sql-input').value;
+    var sql = $('sql-input').value;
     if (!sql.trim()) { renderVerdict('warn', '请先写 SQL 再判题。', null, null); return; }
 
     var ref = referenceResult(q);
     if (!ref.ok) {
-      byId('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错。';
-      show(byId('ref-review-block'), true);
+      $('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错。';
+      show($('ref-review-block'), true);
       renderVerdict('warn', '本题标记「题库待复核」，跳过判题。', null, null);
       return;
     }
-    show(byId('ref-review-block'), false);
+    show($('ref-review-block'), false);
 
     var res;
     try {
       res = window.HRDb.runQuery(db, sql);
     } catch (e) {
-      renderVerdict('fail', 'SQL 执行错误（原样展示）：', { reason: String(e && e.message ? e.message : e), columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: 0, refRowCount: 0 }, null);
+      renderRunError(String(e && e.message ? e.message : e));
       return;
     }
 
@@ -356,78 +422,122 @@
       { orderSensitive: !!(q.expected && q.expected.order_sensitive) }
     );
 
-    /* 契约 §4 方案 A + B 对账：row_count 不一致 → 打「题库待复核」，不得判用户错 */
+    /* 题库对账不通过 → 不判用户错，也不扣心。 */
     if (ref.mismatch) {
-      byId('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
-        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错（下方结论仅供参考）。';
-      show(byId('ref-review-block'), true);
+      $('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
+        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错（下方结论仅供参考），也不扣心。';
+      show($('ref-review-block'), true);
       renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns);
       return;
     }
 
+    state.sql[q.id] = sql;
+
     if (verdict.pass) {
-      entryFor(q.id).passed = true;
-      entryFor(q.id).sql = sql;
+      var r = L.recordPass(state, q.id);
       saveProgress();
       renderPostPass(q);
-      show(byId('post-pass-block'), true);
-      renderVerdict('pass', '通过', verdict, ref.result.columns);
+      show($('post-pass-block'), true);
+      var note = r.firstTime
+        ? '过关 +' + r.xpGained + ' XP' + (r.streak > 0 ? '，连胜 ' + r.streak : '')
+        : '重复通关，不再加分（同一关只计一次）';
+      if (r.goalMet && r.firstTime) note += '；今日目标已达成 \u2713';
+      renderVerdict('pass', '通过 —— ' + note, verdict, ref.result.columns);
     } else {
-      renderVerdict('fail', '不通过', verdict, ref.result.columns);
+      var w = L.recordWrong(state, q.id);
+      saveProgress();
+      var hintList = hintTexts(q);
+      var before = state.hintSeen[q.id] || 0;
+      if (before < hintList.length) {
+        state.hintSeen[q.id] = before + 1;   // 判错自动解锁下一条提示（渐进，不一次甩全）
+        saveProgress();
+      }
+      renderHints(q);
+      var note2 = w.reset
+        ? '休息一下，本关重新开始（心已回满，已通过的关不受影响）。错题已记入错题本。'
+        : '不通过，扣 1 颗心，还剩 ' + w.hearts + ' 颗。错题已记入错题本。';
+      renderVerdict('fail', '未通过 —— ' + note2, verdict, ref.result.columns);
     }
-    updateProgressText();
-    renderList();
+    renderStats();
+    renderNav();
   }
 
   function doAnswer() {
     var q = currentQuestion();
     if (!q) return;
-    byId('answer-mssql').textContent = q.reference_sql || '（题库未提供 reference_sql，本题禁用查看答案）';
-    byId('answer-sqlite').textContent = q.reference_sql_sqlite || q.reference_sql || '（题库未提供）';
-    byId('answer-note').textContent = '上方为 SQL Server 权威写法（仅展示、不执行，含 dbo. 前缀）；下方为 SQLite 等价写法，' +
+    $('answer-mssql').textContent = q.reference_sql || '（题库未提供 reference_sql，本题禁用查看答案）';
+    $('answer-sqlite').textContent = q.reference_sql_sqlite || q.reference_sql || '（题库未提供）';
+    $('answer-note').textContent = '上方为 SQL Server 权威写法（仅展示、不执行，含 dbo. 前缀）；下方为 SQLite 等价写法，' +
       '判题的预期结果就是它在当前库上现场跑出来的。权威以 SQL Server 版为准。基准日固定 ' + BASELINE_DATE + '。';
-    show(byId('answer-block'), true);
+    show($('answer-block'), true);
   }
 
   /* ------------------------------ 事件绑定 ------------------------------ */
   function bindUi() {
-    byId('btn-hint').addEventListener('click', function () {
-      var hint = byId('q-hint');
-      hint.hidden = !hint.hidden;
-      this.textContent = hint.hidden ? '展开提示' : '收起提示';
+    $('btn-hint').addEventListener('click', revealNextHint);
+    $('btn-run').addEventListener('click', doRun);
+    $('btn-judge').addEventListener('click', doJudge);
+    $('btn-answer').addEventListener('click', doAnswer);
+
+    var sqlInput = $('sql-input');
+    /* Tab 插入两个空格，不把焦点跳走（键盘用户友好；任务卡 §4.3） */
+    sqlInput.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      var s = this.selectionStart;
+      var t = this.selectionEnd;
+      this.value = this.value.slice(0, s) + '  ' + this.value.slice(t);
+      this.selectionStart = this.selectionEnd = s + 2;
+      onSqlEdit();
     });
-    byId('btn-run').addEventListener('click', doRun);
-    byId('btn-judge').addEventListener('click', doJudge);
-    byId('btn-answer').addEventListener('click', doAnswer);
-    byId('sql-input').addEventListener('input', function () {
-      var q = currentQuestion();
-      if (q) { entryFor(q.id).sql = this.value; saveProgress(); }
-      checkForbidden();
+    sqlInput.addEventListener('input', onSqlEdit);
+
+    $('btn-drawer').addEventListener('click', function () {
+      var sb = document.querySelector('.sidebar');
+      var collapsed = sb.classList.toggle('collapsed');
+      this.textContent = collapsed ? '展开' : '收起';
+      this.setAttribute('aria-expanded', String(!collapsed));
     });
-    ['filter-level', 'filter-subject', 'filter-tag', 'filter-kp', 'sort-by'].forEach(function (id) {
-      byId(id).addEventListener('change', renderList);
-    });
-    byId('btn-reset').addEventListener('click', function () {
-      if (!window.confirm('确定清空全部题的作答与通过状态？')) return;
-      progress = {};
+
+    $('btn-reset').addEventListener('click', function () {
+      if (!window.confirm('确定重置全部进度？XP / 通过记录 / 错题本 / 今日计数 / 已写 SQL 全部清空。')) return;
+      if (!window.confirm('再确认一次：此操作不可撤销。')) return;
+      state = L.freshState();
+      L.ensureDay(state, L.todayStamp());
       saveProgress();
       refCache = {};
-      updateProgressText();
-      renderList();
+      openSections = {};
+      currentId = null;
+      renderNav();
+      renderStats();
       renderDetail();
+      showBanner('selfcheck-banner', '');
     });
+  }
+
+  function onSqlEdit() {
+    var q = currentQuestion();
+    if (q) { state.sql[q.id] = $('sql-input').value; saveProgress(); }
+    checkForbidden();
   }
 
   /* ------------------------------ 启动 ------------------------------ */
   function boot() {
-    updateProgressText();
+    if (!L) { showBanner('load-banner', '初始化失败：关卡编排模块 HRLevels 缺失。'); return; }
     if (!QUESTIONS.length) {
       showBanner('load-banner', '题库为空：未能从内联数据中读到 questions。');
       return;
     }
-    fillFilters();
     bindUi();
-    renderList();
+
+    /* 恢复上次所在关；无效则落回第一关。 */
+    var startId = state.current && QUESTION_BY_ID[state.current] ? state.current : SECTIONS[0].questions[0].id;
+    currentId = startId;
+    state.current = startId;
+    saveProgress();
+    renderNav();
+    renderStats();
+    renderDetail();
 
     if (!window.HRDb || typeof initSqlJs !== 'function') {
       showBanner('load-banner', '初始化失败：内联脚本未完整加载（HRDb / initSqlJs 缺失）。');
@@ -440,10 +550,10 @@
       seedSql: BOOT.seedSql,
       expectedCounts: BOOT.rowcountExpected || {}
     }).then(function (r) {
-      var banner = byId('load-banner');
-      if (banner) { banner.textContent = '数据库已就绪。'; banner.hidden = true; }
+      showBanner('load-banner', '');
       db = r.db;
       dbReady = true;
+      /* 11 表行数对不上：页面红条提示，而不是白屏。 */
       if (!r.selfCheck.ok) {
         showBanner('selfcheck-banner', '库自检失败（' + r.selfCheck.okCount + '/' + r.selfCheck.total + ' 表不符）：' +
           r.selfCheck.tables.filter(function (t) { return !t.ok; })
