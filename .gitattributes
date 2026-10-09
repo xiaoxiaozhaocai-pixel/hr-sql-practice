@@ -1,0 +1,16 @@
+# 跨平台字节一致性
+# 背景：本仓库包含一个「双击即用」的单文件产物 dist/hr-sql-practice.html。
+#       git 的 core.autocrlf 若为 true，会在 checkout 时把 LF 换成 CRLF，
+#       导致别人 clone 出来的产物字节与构建结果不一致。
+#       这里显式锁死：源码统一 LF；构建产物按二进制处理，不做任何换行改写。
+* text=auto eol=lf
+
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+
+# 单文件构建产物：-text 表示不做任何换行/BOM 转换，保证字节可复现
+dist/*.html -text
