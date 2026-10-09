@@ -235,13 +235,15 @@ judgeResult(userRows, userColumns, refRows, refColumns, options) -> verdict
 
 ---
 
-## 8. 待业务侧钉死的点（含必须记的一条）
+## 8. 口径裁定与待定点
 
-1. **【待业务侧最终钉死】列名到底比不比？** 题目契约文档 `docs/questions-contract-v1.md` §5.2 要求
-   「列集合必须一致」（即**要比**），而业务侧交付口径是「**列名默认不比**，只在差异区提示『列名与预期不同』」。
-   工程侧**已按「默认不比」实现**（更利于练习，同一条 SQL 的多种合法写法都能过）。
-   **两处口径冲突，标记为待业务侧最终钉死。** 一旦裁决「必须比」，改动点只有 `src/judge.js` 里的
-   `namesSetEqual` / `columnIssue` 分支，验证用例是 `test/judge.test.mjs` 的
+1. **【已钉死 · 2026-10-09】列名默认不比。** 项目主人 2026-10-09 裁定：**列名默认不比**。
+   此前有两处口径打架 —— 题目契约文档 `docs/questions-contract-v1.md` §5.2 写「列集合必须一致」（即要比），
+   业务侧交付口径写「列名默认不比，只在差异区提示『列名与预期不同』」。
+   现以主人裁定为准：**默认不比**，工程实现维持现状（`src/judge.js` 的 `namesSetEqual` / `columnIssue` 分支），
+   列名与预期不同时只在结论里提示，不判错。
+   契约文档 §5.2 待业务侧（HRIS）侧同步修订。
+   若日后改判「必须比」，改动点只有 `src/judge.js`，验证用例是 `test/judge.test.mjs` 的
    `different_column_names_same_position_passes_with_column_issue`。
 2. `expected.row_count` 的固化范围：目前 20 题都有值，是不是所有新题都必须回填？
 3. `order_sensitive` 是否需要按题目可配（当前字段已支持，题库里都是默认 `false`）。
