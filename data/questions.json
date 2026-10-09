@@ -1,0 +1,2537 @@
+{
+  "schema_version": "1.0",
+  "db": {
+    "dialect": "sqlite",
+    "baseline_date": "2026-06-30",
+    "data_range": [
+      "2025-07-01",
+      "2026-06-30"
+    ],
+    "source": [
+      "schema_sqlite.sql",
+      "seed_sqlite.sql",
+      "hr_practice.sqlite"
+    ],
+    "table_row_counts": {
+      "HR_DICT": 73,
+      "HR_ORG": 40,
+      "HR_JOB": 25,
+      "HR_EMPLOYEE": 200,
+      "HR_POSITION": 60,
+      "HR_ASSIGNMENT": 243,
+      "HR_SALARY": 1868,
+      "HR_ATTENDANCE": 1868,
+      "HR_RECRUIT_REQ": 30,
+      "HR_CANDIDATE": 120,
+      "HR_PERFORMANCE": 315
+    },
+    "row_total": 4842,
+    "generated_at": "2026-10-09",
+    "note": "reference_sql 为 SQL Server(T-SQL) 权威写法；reference_sql_sqlite 为在 hr_practice.sqlite 上实跑通过的等价写法；expected.* 为实测值。"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "seq": 1,
+      "title": "现在还有哪些人在职（花名册明细）",
+      "subject": "员工",
+      "level": 1,
+      "knowledge_point": "单表筛选 + NULL 判断",
+      "secondary_points": [
+        "WHERE IS NULL",
+        "指定列",
+        "ORDER BY"
+      ],
+      "stem": "招聘与社保核查要一份“当前在职人员”基础名单。花名册里并没有‘在职状态’这一列，只有一格离职日期；有人拿 IsActive=1 当在职，结果人数对不上。",
+      "requirement": "输出当前在职员工的工号、姓名、入职日期。口径：离职日期(TermDate)为空视为在职。",
+      "output_hint": "三列：工号、姓名、入职日期；按工号升序；共 170 行。",
+      "hint": "想一想：“在职”在数据里到底是一个“某列等于某值”，还是“某列为空”？",
+      "reference_sql": "SELECT EmpNo AS 工号, EmpName AS 姓名, HireDate AS 入职日期\nFROM dbo.HR_EMPLOYEE\nWHERE TermDate IS NULL\nORDER BY EmpNo;",
+      "reference_sql_sqlite": "SELECT EmpNo AS 工号, EmpName AS 姓名, HireDate AS 入职日期\nFROM HR_EMPLOYEE\nWHERE TermDate IS NULL\nORDER BY EmpNo;",
+      "expected": {
+        "columns": [
+          "工号",
+          "姓名",
+          "入职日期"
+        ],
+        "row_count": 170,
+        "rows": [
+          [
+            "10002",
+            "汪明斌",
+            "2025-12-15"
+          ],
+          [
+            "10004",
+            "邓琳萍",
+            "2021-03-11"
+          ],
+          [
+            "10005",
+            "吴萍",
+            "2024-12-29"
+          ],
+          [
+            "10006",
+            "胡宇",
+            "2023-01-20"
+          ],
+          [
+            "10007",
+            "万静",
+            "2026-01-30"
+          ],
+          [
+            "10008",
+            "薛莉娟",
+            "2026-02-08"
+          ],
+          [
+            "10009",
+            "马健",
+            "2025-09-15"
+          ],
+          [
+            "1001",
+            "范琳",
+            "2020-03-30"
+          ],
+          [
+            "10010",
+            "龙博宁",
+            "2023-06-09"
+          ],
+          [
+            "10011",
+            "邱悦",
+            "2025-03-30"
+          ],
+          [
+            "10012",
+            "刘宁波",
+            "2023-03-04"
+          ],
+          [
+            "10013",
+            "付宁",
+            "2023-01-02"
+          ],
+          [
+            "10014",
+            "谢敏",
+            "2023-06-11"
+          ],
+          [
+            "10015",
+            "冯健强",
+            "2026-01-11"
+          ],
+          [
+            "10016",
+            "方晨",
+            "2023-01-03"
+          ],
+          [
+            "10017",
+            "段峰",
+            "2024-07-26"
+          ],
+          [
+            "10018",
+            "何倩",
+            "2023-07-18"
+          ],
+          [
+            "1002",
+            "尹辉",
+            "2025-07-19"
+          ],
+          [
+            "10021",
+            "段岩刚",
+            "2025-09-05"
+          ],
+          [
+            "10022",
+            "黄莉",
+            "2025-12-08"
+          ],
+          [
+            "10023",
+            "廖波",
+            "2025-10-23"
+          ],
+          [
+            "10024",
+            "孙坤航",
+            "2024-12-12"
+          ],
+          [
+            "10025",
+            "林妍",
+            "2026-02-05"
+          ],
+          [
+            "10026",
+            "黄峰",
+            "2021-06-09"
+          ],
+          [
+            "10027",
+            "何凯鹏",
+            "2024-01-24"
+          ],
+          [
+            "10028",
+            "段琳",
+            "2024-12-06"
+          ],
+          [
+            "10029",
+            "龙鹏",
+            "2024-04-25"
+          ],
+          [
+            "1003",
+            "苏敏娟",
+            "2020-05-20"
+          ],
+          [
+            "10030",
+            "杨凯",
+            "2022-04-29"
+          ],
+          [
+            "10033",
+            "石浩",
+            "2025-12-31"
+          ],
+          [
+            "10034",
+            "汪睿",
+            "2023-11-22"
+          ],
+          [
+            "10035",
+            "付晨",
+            "2023-10-26"
+          ],
+          [
+            "10036",
+            "金霞",
+            "2021-08-15"
+          ],
+          [
+            "10037",
+            "曹萌",
+            "2025-08-20"
+          ],
+          [
+            "10038",
+            "田慧",
+            "2025-03-24"
+          ],
+          [
+            "10039",
+            "吕航辉",
+            "2025-01-09"
+          ],
+          [
+            "1004",
+            "金浩",
+            "2019-05-12"
+          ],
+          [
+            "10040",
+            "杨明",
+            "2025-05-15"
+          ],
+          [
+            "10041",
+            "林斌浩",
+            "2025-12-19"
+          ],
+          [
+            "10042",
+            "戴燕芬",
+            "2023-11-08"
+          ],
+          [
+            "10043",
+            "叶玲",
+            "2025-12-28"
+          ],
+          [
+            "10044",
+            "卢明",
+            "2025-07-12"
+          ],
+          [
+            "10046",
+            "汤欣妍",
+            "2025-09-14"
+          ],
+          [
+            "10047",
+            "姚霄",
+            "2025-10-20"
+          ],
+          [
+            "10048",
+            "何霞",
+            "2025-10-27"
+          ],
+          [
+            "10049",
+            "雷静梅",
+            "2025-01-18"
+          ],
+          [
+            "1005",
+            "郭伟",
+            "2026-04-10"
+          ],
+          [
+            "10050",
+            "邵霄",
+            "2026-05-17"
+          ],
+          [
+            "10051",
+            "万晨",
+            "2025-11-21"
+          ],
+          [
+            "10052",
+            "贺艳娜",
+            "2024-03-10"
+          ]
+        ],
+        "content_hash": "5d9e033298d61b57f36331ee7bcd650e06ce20d22db6d329a110ac36496847c1",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 IsActive = 1 判断在职会错：IsActive 是 1/0/NULL 混用的脏字段，与真实在职状态并不一致（在职 170 人，但 IsActive=1 的行数不是 170）。",
+        "把 TermDate = ''（空串）当在职：SQLite 里空串不等于 NULL，TermDate='' 不成立，必须用 IS NULL。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "SQL Server 需写 dbo. 前缀，SQLite 无前缀；日期列在 SQLite 中是 TEXT，IS NULL 语义两边一致。",
+      "tags": [
+        "NULL",
+        "WHERE",
+        "在职",
+        "单表筛选"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q002",
+      "seq": 2,
+      "title": "“硕士或派遣”的在职员工有几个",
+      "subject": "员工",
+      "level": 1,
+      "knowledge_point": "WHERE 多条件 + AND / OR 优先级",
+      "secondary_points": [
+        "AND/OR 括号",
+        "布尔优先级"
+      ],
+      "stem": "预算会上两个口径被口头说成了“硕士或派遣的在职员工”。财务要求把范围精确落成一句 SQL，别把两类条件混串在一起算。",
+      "requirement": "统计“在职 且（学历为硕士 或 雇佣类型为派遣）”的员工人数。",
+      "output_hint": "一个数字：员工数。正确答案 20。",
+      "hint": "AND 的优先级高于 OR；不加括号时 SQL 会先算 AND，结果和你要的不是一回事。",
+      "reference_sql": "SELECT COUNT(*) AS 员工数\nFROM dbo.HR_EMPLOYEE\nWHERE TermDate IS NULL\n  AND (EducationCode = 'MASTER' OR EmpTypeCode = 'DISPATCH');",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 员工数\nFROM HR_EMPLOYEE\nWHERE TermDate IS NULL\n  AND (EducationCode = 'MASTER' OR EmpTypeCode = 'DISPATCH');",
+      "expected": {
+        "columns": [
+          "员工数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            20
+          ]
+        ],
+        "content_hash": "d857e057431cc61b9cb6c497d8f0dac8476b0f8ad602fb9e5ab5c90aab363251",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "漏括号导致 OR 被拆开：写成 WHERE TermDate IS NULL AND EducationCode='MASTER' OR EmpTypeCode='DISPATCH' 会被解析成（在职且硕士）或（派遣），把离职的派遣也算进来，得 21 而不是 20。",
+        "把“在职”条件也写进括号：正确结构是 在职 AND（硕士 OR 派遣），括号只包住两个并列条件。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "无差异，两种引擎的 AND/OR 优先级一致。",
+      "tags": [
+        "AND/OR",
+        "括号优先级",
+        "WHERE"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q003",
+      "seq": 3,
+      "title": "组织清单排序——字符型编码的“10 排到了 9 前面”",
+      "subject": "组织",
+      "level": 1,
+      "knowledge_point": "ORDER BY 多键排序（字符型数字陷阱）",
+      "secondary_points": [
+        "ORDER BY 多键",
+        "CAST 转数值"
+      ],
+      "stem": "主数据组要一张“按层级、按组织编码”的组织清单做导入模板。同事说编码本来就是数字，直接排就行，结果 10 号部门被排到了 9 号前面。",
+      "requirement": "列出全部组织，按组织层级(OrgLevel)升序、同层级内按组织编码(OrgCode)的数值大小升序，输出组织编码、组织名、层级。",
+      "output_hint": "三列：组织编码、组织名、层级；OrgCode 是字符型，需要转成数值再排；共 40 行。",
+      "hint": "在字符串比较里 '10' < '9' 是成立的（先比第一位 '1' < '9'）。要按数值排，得先把它 CAST 成整数。",
+      "reference_sql": "SELECT OrgCode AS 组织编码, OrgName AS 组织名, OrgLevel AS 层级\nFROM dbo.HR_ORG\nORDER BY OrgLevel ASC, CAST(OrgCode AS INT) ASC;",
+      "reference_sql_sqlite": "SELECT OrgCode AS 组织编码, OrgName AS 组织名, OrgLevel AS 层级\nFROM HR_ORG\nORDER BY OrgLevel ASC, CAST(OrgCode AS INTEGER) ASC;",
+      "expected": {
+        "columns": [
+          "组织编码",
+          "组织名",
+          "层级"
+        ],
+        "row_count": 40,
+        "rows": [
+          [
+            "1",
+            "总公司",
+            1
+          ],
+          [
+            "02",
+            "第一制造厂",
+            2
+          ],
+          [
+            "03",
+            "第二制造厂",
+            2
+          ],
+          [
+            "04",
+            "研发中心",
+            2
+          ],
+          [
+            "05",
+            "职能中心",
+            2
+          ],
+          [
+            "6",
+            "生产一部",
+            3
+          ],
+          [
+            "7",
+            "生产二部",
+            3
+          ],
+          [
+            "8",
+            "品质部",
+            3
+          ],
+          [
+            "9",
+            "生产三部",
+            3
+          ],
+          [
+            "010",
+            "设备部",
+            3
+          ],
+          [
+            "11",
+            "供应链部",
+            3
+          ],
+          [
+            "12",
+            "海外运营部",
+            3
+          ],
+          [
+            "13",
+            "工艺部",
+            3
+          ],
+          [
+            "14",
+            "测试部",
+            3
+          ],
+          [
+            "015",
+            "人力资源部",
+            3
+          ],
+          [
+            "16",
+            "财务部",
+            3
+          ],
+          [
+            "17",
+            "IT部",
+            3
+          ],
+          [
+            "18",
+            "一班",
+            4
+          ],
+          [
+            "19",
+            "二班",
+            4
+          ],
+          [
+            "20",
+            "三班",
+            4
+          ],
+          [
+            "21",
+            "四班",
+            4
+          ],
+          [
+            "22",
+            "一班",
+            4
+          ],
+          [
+            "23",
+            "二班",
+            4
+          ],
+          [
+            "24",
+            "三班",
+            4
+          ],
+          [
+            "25",
+            "一班",
+            4
+          ],
+          [
+            "26",
+            "二班",
+            4
+          ],
+          [
+            "27",
+            "三班",
+            4
+          ],
+          [
+            "28",
+            "一班",
+            4
+          ],
+          [
+            "29",
+            "二班",
+            4
+          ],
+          [
+            "30",
+            "三班",
+            4
+          ],
+          [
+            "31",
+            "维修班",
+            4
+          ],
+          [
+            "32",
+            "电气班",
+            4
+          ],
+          [
+            "33",
+            "动力班",
+            4
+          ],
+          [
+            "34",
+            "仓储组",
+            4
+          ],
+          [
+            "35",
+            "配送组",
+            4
+          ],
+          [
+            "36",
+            "工艺一组",
+            4
+          ],
+          [
+            "37",
+            "工艺二组",
+            4
+          ],
+          [
+            "38",
+            "工艺三组",
+            4
+          ],
+          [
+            "39",
+            "功能测试组",
+            4
+          ],
+          [
+            "40",
+            "可靠性测试组",
+            4
+          ]
+        ],
+        "content_hash": "3c212bf3dc32b303401996c78c05cf50f9eacaf840ce3bf2ff3c6343b7c1ed6b",
+        "order_sensitive": true
+      },
+      "pitfalls": [
+        "直接 ORDER BY OrgCode：字符型比较会把 '10' 排到 '9' 前，层级内顺序错乱。",
+        "CAST 类型写错（如 CAST(OrgCode AS CHAR)）等于没转。",
+        "把 OrgCode 当纯数字列：它长度不一（'1' / '02' / '010' 混存），必须显式转换。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "SQL Server 用 CAST(OrgCode AS INT)；SQLite 用 CAST(OrgCode AS INTEGER)，结果一致。",
+      "tags": [
+        "ORDER BY",
+        "CAST",
+        "字符型数字",
+        "组织主数据"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q004",
+      "seq": 4,
+      "title": "本财年（2025H2+2026H1）招进来多少人",
+      "subject": "员工",
+      "level": 1,
+      "knowledge_point": "BETWEEN / 日期区间",
+      "secondary_points": [
+        "BETWEEN 闭区间",
+        "日期字面量"
+      ],
+      "stem": "年报要“本考核年度新入职人数”。财务年度是 2025-07-01 到 2026-06-30，两端都含；有人用 > 和 < 写，把首尾两天漏掉了。",
+      "requirement": "统计入职日期落在 2025-07-01 至 2026-06-30（含两端）之间的员工数，用 BETWEEN。",
+      "output_hint": "一个数字：入职人数。正确答案 74。",
+      "hint": "BETWEEN 是闭区间；顺便确认一下 6 月 30 日当天入职的人有没有被算进去。",
+      "reference_sql": "SELECT COUNT(*) AS 入职人数\nFROM dbo.HR_EMPLOYEE\nWHERE HireDate BETWEEN '2025-07-01' AND '2026-06-30';",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 入职人数\nFROM HR_EMPLOYEE\nWHERE HireDate BETWEEN '2025-07-01' AND '2026-06-30';",
+      "expected": {
+        "columns": [
+          "入职人数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            74
+          ]
+        ],
+        "content_hash": "ae08ad685a9c046329e6ee4ae3be71c67838498e51335a1befbf9b08ccf464b6",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 > 与 < 替代 BETWEEN（或 >= 与 <= 写错），把首尾两个边界日漏掉。",
+        "日期写成含糊格式（如 '07/01/2025'）：SQL Server 按本地化解析、SQLite 只按文本比，务必统一用 'YYYY-MM-DD'。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "日期字面量 'YYYY-MM-DD' 两边写法一致；SQLite 日期为 TEXT，字典序即时间序，区间比较照旧成立。",
+      "tags": [
+        "BETWEEN",
+        "日期区间",
+        "HireDate"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q005",
+      "seq": 5,
+      "title": "“非实习也非外包”到底有多少人",
+      "subject": "员工",
+      "level": 1,
+      "knowledge_point": "IN / NOT IN 与 NULL 陷阱",
+      "secondary_points": [
+        "NOT IN",
+        "三值逻辑"
+      ],
+      "stem": "有个福利口径是“排除实习和外包”。HR 用 NOT IN 写完后，人数比手工点名少了一截，怀疑有人被静默漏掉了。",
+      "requirement": "用 NOT IN 统计雇佣类型不等于（实习 INTERN、外包 OUTSOURCE）的员工数。",
+      "output_hint": "一个数字：员工数。正确答案 145（注意 NULL 会被 NOT IN 连带排除）。",
+      "hint": "NOT IN 遇到 NULL 不会返回“真”，那 8 个雇佣类型为空的员工不会出现在结果里。",
+      "reference_sql": "SELECT COUNT(*) AS 员工数\nFROM dbo.HR_EMPLOYEE\nWHERE EmpTypeCode NOT IN ('INTERN', 'OUTSOURCE');",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 员工数\nFROM HR_EMPLOYEE\nWHERE EmpTypeCode NOT IN ('INTERN', 'OUTSOURCE');",
+      "expected": {
+        "columns": [
+          "员工数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            145
+          ]
+        ],
+        "content_hash": "09023253b67898c0f0d2c87429f984174d568dd31a077d6eb1c220598c3196b6",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "以为 NOT IN 会把 8 个 EmpTypeCode 为 NULL 的人也带上：三值逻辑下 NULL 不满足 NOT IN，这 8 人被静默排除，得 145 而非 153。",
+        "这不是写法错，而是口径没先定：若业务上“类型未知”也应算进来，需要显式写成 NOT IN (...) OR EmpTypeCode IS NULL。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎三值逻辑一致，NOT IN 对 NULL 的处理相同。",
+      "tags": [
+        "NOT IN",
+        "NULL",
+        "三值逻辑"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q006",
+      "seq": 6,
+      "title": "200 人里有多少人有生日、有手机号",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "COUNT(*) 与 COUNT(列) 的差异",
+      "secondary_points": [
+        "COUNT(列) 跳过 NULL",
+        "主数据完整度"
+      ],
+      "stem": "数据治理盘点要报三个数：花名册总人数、有出生日期人数、有手机号人数，用来评估主数据完整度。有人把 COUNT(某列) 当成了总人数。",
+      "requirement": "一行输出三个数：员工总数、有出生日期(BirthDate 非空)的人数、有手机号(Mobile 非空)的人数。",
+      "output_hint": "一行三列：员工总数、有出生日期人数、有手机号人数。答案 200 / 197 / 170。",
+      "hint": "COUNT(*) 数的是行，COUNT(列) 只数该列非空的行。",
+      "reference_sql": "SELECT COUNT(*) AS 员工总数,\n       COUNT(BirthDate) AS 有出生日期人数,\n       COUNT(Mobile)    AS 有手机号人数\nFROM dbo.HR_EMPLOYEE;",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 员工总数,\n       COUNT(BirthDate) AS 有出生日期人数,\n       COUNT(Mobile)    AS 有手机号人数\nFROM HR_EMPLOYEE;",
+      "expected": {
+        "columns": [
+          "员工总数",
+          "有出生日期人数",
+          "有手机号人数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            200,
+            197,
+            170
+          ]
+        ],
+        "content_hash": "860526456632a2ca12f3bfbf84c0f5ed451a765a11e5db18ec6513a4e818f99b",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "把 COUNT(BirthDate) 当总人数：它只数非空，会少 3（3 人无出生日期）。",
+        "以为 COUNT(列) 会把 NULL 也算进去：COUNT(列) 永远跳过 NULL。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "COUNT 语义两引擎一致。",
+      "tags": [
+        "COUNT",
+        "NULL",
+        "主数据完整度"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q007",
+      "seq": 7,
+      "title": "有多少人有 2 段以上任职记录",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "分组 + HAVING 找重复（一人多段任职）",
+      "secondary_points": [
+        "JOIN 取姓名",
+        "COUNT 分组"
+      ],
+      "stem": "任职表是“人×组织×岗位×时间”的流水，一人可能有多段（入职、调动、晋升、兼岗）。主数据组要确认“哪些人有不止一段”，好排查是否出现重复任职段。",
+      "requirement": "找出拥有 2 段及以上任职记录(HR_ASSIGNMENT)的员工，输出工号、姓名、任职段数，按工号升序。",
+      "output_hint": "三列：工号、姓名、任职段数；预期 43 行。",
+      "hint": "按工号分组计数，HAVING COUNT(*) >= 2；姓名要去员工表取。",
+      "reference_sql": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名, COUNT(*) AS 任职段数\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nGROUP BY e.EmpNo, e.EmpName\nHAVING COUNT(*) >= 2\nORDER BY e.EmpNo;",
+      "reference_sql_sqlite": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名, COUNT(*) AS 任职段数\nFROM HR_ASSIGNMENT a\nJOIN HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nGROUP BY e.EmpNo, e.EmpName\nHAVING COUNT(*) >= 2\nORDER BY e.EmpNo;",
+      "expected": {
+        "columns": [
+          "工号",
+          "姓名",
+          "任职段数"
+        ],
+        "row_count": 43,
+        "rows": [
+          [
+            "10011",
+            "邱悦",
+            2
+          ],
+          [
+            "10012",
+            "刘宁波",
+            2
+          ],
+          [
+            "10014",
+            "谢敏",
+            2
+          ],
+          [
+            "10015",
+            "冯健强",
+            2
+          ],
+          [
+            "10016",
+            "方晨",
+            2
+          ],
+          [
+            "1002",
+            "尹辉",
+            2
+          ],
+          [
+            "10029",
+            "龙鹏",
+            2
+          ],
+          [
+            "1003",
+            "苏敏娟",
+            2
+          ],
+          [
+            "10035",
+            "付晨",
+            2
+          ],
+          [
+            "10044",
+            "卢明",
+            2
+          ],
+          [
+            "10052",
+            "贺艳娜",
+            2
+          ],
+          [
+            "10055",
+            "陈梅",
+            2
+          ],
+          [
+            "10058",
+            "史蕾",
+            2
+          ],
+          [
+            "1006",
+            "黎峰",
+            2
+          ],
+          [
+            "10063",
+            "周慧",
+            2
+          ],
+          [
+            "10066",
+            "孔敏",
+            2
+          ],
+          [
+            "10069",
+            "张伟",
+            2
+          ],
+          [
+            "1007",
+            "王杰帅",
+            2
+          ],
+          [
+            "10070",
+            "彭倩",
+            2
+          ],
+          [
+            "10074",
+            "冯萍",
+            2
+          ],
+          [
+            "10079",
+            "徐梅萌",
+            2
+          ],
+          [
+            "10082",
+            "谭梅霄",
+            2
+          ],
+          [
+            "10086",
+            "郭洋",
+            2
+          ],
+          [
+            "10087",
+            "朱凯波",
+            2
+          ],
+          [
+            "10089",
+            "卢健",
+            2
+          ],
+          [
+            "10093",
+            "郝杰洋",
+            2
+          ],
+          [
+            "10095",
+            "韩晨",
+            2
+          ],
+          [
+            "10097",
+            "肖航",
+            2
+          ],
+          [
+            "10099",
+            "于艳",
+            2
+          ],
+          [
+            "10100",
+            "周敏怡",
+            2
+          ],
+          [
+            "10105",
+            "陶刚明",
+            2
+          ],
+          [
+            "10117",
+            "曾洁",
+            2
+          ],
+          [
+            "10122",
+            "沈勇",
+            2
+          ],
+          [
+            "10131",
+            "侯欣",
+            2
+          ],
+          [
+            "10132",
+            "胡彤",
+            2
+          ],
+          [
+            "10133",
+            "薛斌",
+            2
+          ],
+          [
+            "10143",
+            "马强",
+            2
+          ],
+          [
+            "10152",
+            "贾博",
+            2
+          ],
+          [
+            "10157",
+            "夏辉波",
+            2
+          ],
+          [
+            "10158",
+            "李岩航",
+            2
+          ],
+          [
+            "10169",
+            "韦燕妍",
+            2
+          ],
+          [
+            "10178",
+            "王宇宁",
+            2
+          ],
+          [
+            "10187",
+            "林晨",
+            2
+          ]
+        ],
+        "content_hash": "bdc714c108cab223ced545ed482189ddf8b1e73fdbc51e33e5f3e5aa0887db4b",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 HAVING COUNT(*) = 2：将来一旦出现 3 段的员工就会被漏掉，“以上”要用 >= 2。",
+        "直接对任职表 COUNT 却不分组：那样得到的是总段数 243，不是人数。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎一致。",
+      "tags": [
+        "HAVING",
+        "一人多段",
+        "GROUP BY",
+        "JOIN"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q008",
+      "seq": 8,
+      "title": "每个班组现在有多少主职在职",
+      "subject": "组织",
+      "level": 2,
+      "knowledge_point": "多表 JOIN + 分组聚合（当前主职口径）",
+      "secondary_points": [
+        "JOIN 数重风险",
+        "EndDate IS NULL 当前口径"
+      ],
+      "stem": "一张班组的“当前在岗人数”看板。有人只把任职表和组织表 JOIN 起来数了一遍，数字偏大——因为他把历史任职段和兼岗也算进来了。",
+      "requirement": "统计每个 4 级组织(班组)当前在职主职人数，输出组织编码、组织名、在职人数，按人数降序、组织编码升序。当前口径：IsPrimary=1 且 EndDate 为空。",
+      "output_hint": "三列：组织编码、组织名、在职人数；预期 19 行（只列出有人的班组）。",
+      "hint": "三个条件缺一不可：组织层级 = 4、IsPrimary = 1、EndDate IS NULL。",
+      "reference_sql": "SELECT o.OrgCode AS 组织编码, o.OrgName AS 组织名, COUNT(*) AS 在职人数\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_ORG      o ON o.ID    = a.OrgID\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nWHERE a.IsPrimary = 1\n  AND a.EndDate IS NULL\n  AND o.OrgLevel = 4\nGROUP BY o.ID, o.OrgCode, o.OrgName\nORDER BY 在职人数 DESC, o.OrgCode ASC;",
+      "reference_sql_sqlite": "SELECT o.OrgCode AS 组织编码, o.OrgName AS 组织名, COUNT(*) AS 在职人数\nFROM HR_ASSIGNMENT a\nJOIN HR_ORG      o ON o.ID    = a.OrgID\nJOIN HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nWHERE a.IsPrimary = 1\n  AND a.EndDate IS NULL\n  AND o.OrgLevel = 4\nGROUP BY o.ID, o.OrgCode, o.OrgName\nORDER BY 在职人数 DESC, o.OrgCode ASC;",
+      "expected": {
+        "columns": [
+          "组织编码",
+          "组织名",
+          "在职人数"
+        ],
+        "row_count": 19,
+        "rows": [
+          [
+            "33",
+            "动力班",
+            13
+          ],
+          [
+            "34",
+            "仓储组",
+            13
+          ],
+          [
+            "25",
+            "一班",
+            12
+          ],
+          [
+            "28",
+            "一班",
+            12
+          ],
+          [
+            "35",
+            "配送组",
+            12
+          ],
+          [
+            "20",
+            "三班",
+            11
+          ],
+          [
+            "21",
+            "四班",
+            11
+          ],
+          [
+            "23",
+            "二班",
+            10
+          ],
+          [
+            "31",
+            "维修班",
+            10
+          ],
+          [
+            "18",
+            "一班",
+            9
+          ],
+          [
+            "32",
+            "电气班",
+            8
+          ],
+          [
+            "19",
+            "二班",
+            7
+          ],
+          [
+            "22",
+            "一班",
+            7
+          ],
+          [
+            "26",
+            "二班",
+            7
+          ],
+          [
+            "30",
+            "三班",
+            7
+          ],
+          [
+            "29",
+            "二班",
+            6
+          ],
+          [
+            "24",
+            "三班",
+            4
+          ],
+          [
+            "27",
+            "三班",
+            4
+          ],
+          [
+            "36",
+            "工艺一组",
+            4
+          ]
+        ],
+        "content_hash": "d0329349dbbd82af26802ec5ac890bbe85881dc327a750e25d87b8099cc03206",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "不加 IsPrimary = 1：把兼岗(DUAL/SECOND)段也算进去，人数虚高。",
+        "不加 EndDate IS NULL：把历史任职段也数进来，人数被放大——这正是典型的“JOIN 数重”。",
+        "只统计 4 级组织会漏掉挂在 3 级组织上的 3 个人（合计 167，不是 170）：为什么对不齐，要先跟业务确认层级口径。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎一致；组织编码排序同为字符比较（全是数字串，结果相同）。",
+      "tags": [
+        "JOIN",
+        "GROUP BY",
+        "当前口径",
+        "数重"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q009",
+      "seq": 9,
+      "title": "任职记录里“结束日早于开始日”的脏数据",
+      "subject": "综合",
+      "level": 2,
+      "knowledge_point": "数据质量排查（日期异常）",
+      "secondary_points": [
+        "多表 JOIN",
+        "日期比较",
+        "异常辨识"
+      ],
+      "stem": "系统上线前主数据体检，运维报“任职表里有几条记录的结束日比开始日还早”，这类记录会让任职时长算成负数。请你把它们捞出来，并带上是谁、在哪个组织。",
+      "requirement": "找出任职记录(HR_ASSIGNMENT)中“结束日早于开始日”的异常数据，输出任职ID、工号、姓名、组织名、开始日、结束日，按任职ID升序。",
+      "output_hint": "六列；预期 3 行。",
+      "hint": "要把员工姓名、组织名一起带出来，需要 JOIN 员工表和组织表；判断条件是 EndDate < StartDate。",
+      "reference_sql": "SELECT a.ID AS 任职ID, a.EmpNo AS 工号, e.EmpName AS 姓名, o.OrgName AS 组织名,\n       a.StartDate AS 开始日, a.EndDate AS 结束日\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nJOIN dbo.HR_ORG o      ON o.ID    = a.OrgID\nWHERE a.EndDate < a.StartDate\nORDER BY a.ID;",
+      "reference_sql_sqlite": "SELECT a.ID AS 任职ID, a.EmpNo AS 工号, e.EmpName AS 姓名, o.OrgName AS 组织名,\n       a.StartDate AS 开始日, a.EndDate AS 结束日\nFROM HR_ASSIGNMENT a\nJOIN HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nJOIN HR_ORG o      ON o.ID    = a.OrgID\nWHERE a.EndDate < a.StartDate\nORDER BY a.ID;",
+      "expected": {
+        "columns": [
+          "任职ID",
+          "工号",
+          "姓名",
+          "组织名",
+          "开始日",
+          "结束日"
+        ],
+        "row_count": 3,
+        "rows": [
+          [
+            72,
+            "10055",
+            "陈梅",
+            "二班",
+            "2026-05-25",
+            "2026-02-27"
+          ],
+          [
+            208,
+            "10158",
+            "李岩航",
+            "三班",
+            "2026-05-25",
+            "2026-04-14"
+          ],
+          [
+            220,
+            "10169",
+            "韦燕妍",
+            "配送组",
+            "2026-03-23",
+            "2026-01-15"
+          ]
+        ],
+        "content_hash": "8addfe89dbb982791d2703f42b71b7d1408324405ec5990b9cd0a5a198faf6ca",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "忘了 EndDate 可能为 NULL：NULL < 日期 在两引擎里都不成立、会被自动排除，所以先不写也安全，但显式加 EndDate IS NOT NULL 更清晰。",
+        "把方向写反（StartDate < EndDate）就变成“正常记录”了，一条脏数据都查不出。",
+        "只输出异常行的 ID、不 JOIN 出姓名/组织：业务方拿着 ID 还要再查一次，排查效率低。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "NULL 比较两引擎一致；JOIN 写法一致（SQLite 去掉 dbo.）。",
+      "tags": [
+        "数据质量",
+        "日期异常",
+        "JOIN",
+        "脏数据"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q010",
+      "seq": 10,
+      "title": "薪酬按币种汇总——别把美元卢比加进人民币",
+      "subject": "薪酬",
+      "level": 2,
+      "knowledge_point": "GROUP BY + SUM",
+      "secondary_points": [
+        "跨币种陷阱",
+        "ROUND"
+      ],
+      "stem": "财务要“全年薪酬发放总额”。有人直接把 NetPay 一整列 SUM 了，数字看着很大，但里面混进了海外员工的美元和卢比，量级完全不同，不能直接相加。",
+      "requirement": "按币种(CurrencyCode)统计薪酬记录数与实发工资(NetPay)合计，合计保留 2 位小数，按币种升序。",
+      "output_hint": "三列：币种、记录数、实发合计；预期 3 行。",
+      "hint": "先 GROUP BY CurrencyCode 把不同币种拆开，再各自 SUM。",
+      "reference_sql": "SELECT CurrencyCode AS 币种,\n       COUNT(*)       AS 记录数,\n       ROUND(SUM(NetPay), 2) AS 实发合计\nFROM dbo.HR_SALARY\nGROUP BY CurrencyCode\nORDER BY CurrencyCode;",
+      "reference_sql_sqlite": "SELECT CurrencyCode AS 币种,\n       COUNT(*)       AS 记录数,\n       ROUND(SUM(NetPay), 2) AS 实发合计\nFROM HR_SALARY\nGROUP BY CurrencyCode\nORDER BY CurrencyCode;",
+      "expected": {
+        "columns": [
+          "币种",
+          "记录数",
+          "实发合计"
+        ],
+        "row_count": 3,
+        "rows": [
+          [
+            "CNY",
+            1808,
+            25615006.1
+          ],
+          [
+            "INR",
+            9,
+            17218.54
+          ],
+          [
+            "USD",
+            51,
+            107290.83
+          ]
+        ],
+        "content_hash": "6fffb6d06f5afc5781d9769474c3d05f89e5abd9bd01c6b4085ed619538068de",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "直接 SUM(NetPay) 不分币种：把 USD/INR 当人民币一起加，得到无意义的总额。",
+        "靠数值大小去猜币种：外币金额量级不同，不能凭大小判断，必须按 CurrencyCode 分组。",
+        "忘记 ROUND：SQLite 数值是 REAL，求和可能出现极小的尾差，判题统一 ROUND(…,2)。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "ROUND 两引擎一致；SQLite 的 decimal 存为 REAL，务必对合计 ROUND(…,2)。",
+      "tags": [
+        "GROUP BY",
+        "SUM",
+        "币种",
+        "ROUND"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q011",
+      "seq": 11,
+      "title": "全年累计缺勤≥3 天的人",
+      "subject": "考勤",
+      "level": 2,
+      "knowledge_point": "GROUP BY + HAVING",
+      "secondary_points": [
+        "HAVING 聚合后筛选",
+        "NULL 表示无缺勤"
+      ],
+      "stem": "员工关系要一份“全年累计缺勤达 3 天及以上”的名单做预警。考勤表的缺勤天数大部分是空的（当月没缺勤），别把空当成 0 去数条数。",
+      "requirement": "累计每位员工 12 个月的缺勤天数(AbsentDays)，找出累计≥3 天的人，输出工号与累计缺勤天数（保留 1 位小数），按累计缺勤天数降序、工号升序。",
+      "output_hint": "两列：工号、累计缺勤天数；预期 5 行。",
+      "hint": "聚合之后再筛选要用 HAVING，不能用 WHERE。",
+      "reference_sql": "SELECT EmpNo AS 工号, ROUND(SUM(AbsentDays), 1) AS 累计缺勤天数\nFROM dbo.HR_ATTENDANCE\nGROUP BY EmpNo\nHAVING SUM(AbsentDays) >= 3\nORDER BY 累计缺勤天数 DESC, EmpNo;",
+      "reference_sql_sqlite": "SELECT EmpNo AS 工号, ROUND(SUM(AbsentDays), 1) AS 累计缺勤天数\nFROM HR_ATTENDANCE\nGROUP BY EmpNo\nHAVING SUM(AbsentDays) >= 3\nORDER BY 累计缺勤天数 DESC, EmpNo;",
+      "expected": {
+        "columns": [
+          "工号",
+          "累计缺勤天数"
+        ],
+        "row_count": 5,
+        "rows": [
+          [
+            "10120",
+            3.8
+          ],
+          [
+            "10124",
+            3.6
+          ],
+          [
+            "10130",
+            3.6
+          ],
+          [
+            "10172",
+            3.4
+          ],
+          [
+            "10049",
+            3.3
+          ]
+        ],
+        "content_hash": "13eb2e82ce23b82a9bf6f41abebaaa99f8fb185228dc1712e507efc5c0a4977f",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 WHERE SUM(AbsentDays) >= 3：WHERE 在聚合之前执行，会直接报错；筛聚合结果必须用 HAVING。",
+        "把缺勤天数为 NULL 当成 0 去 COUNT/AVG：NULL 表示“当月无缺勤”，SUM 会自动跳过；换成 COUNT 或 AVG 口径就偏了。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "HAVING 两引擎一致。",
+      "tags": [
+        "GROUP BY",
+        "HAVING",
+        "考勤",
+        "NULL"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q012",
+      "seq": 12,
+      "title": "两个考核周期的平均分与参评率",
+      "subject": "绩效",
+      "level": 2,
+      "knowledge_point": "AVG + 四舍五入 + NULL 影响",
+      "secondary_points": [
+        "AVG 跳过 NULL",
+        "COUNT(列) 对账分母"
+      ],
+      "stem": "绩效复盘要“每个考核周期的平均分”，并顺带看参评情况。有人直接 AVG(ScoreValue)，被质疑“没参评的人是不是把分母算错了”。",
+      "requirement": "按考核周期(PeriodCode)统计记录数、有分数的记录数(ScoreValue 非空)、平均分（保留 2 位），按周期升序。",
+      "output_hint": "四列：考核周期、记录数、有分数记录数、平均分；预期 2 行。",
+      "hint": "AVG 会自动跳过 NULL；想核对分母，就同时把 COUNT(*) 和 COUNT(ScoreValue) 都输出来对照。",
+      "reference_sql": "SELECT PeriodCode AS 考核周期,\n       COUNT(*)           AS 记录数,\n       COUNT(ScoreValue)  AS 有分数记录数,\n       ROUND(AVG(ScoreValue), 2) AS 平均分\nFROM dbo.HR_PERFORMANCE\nGROUP BY PeriodCode\nORDER BY PeriodCode;",
+      "reference_sql_sqlite": "SELECT PeriodCode AS 考核周期,\n       COUNT(*)           AS 记录数,\n       COUNT(ScoreValue)  AS 有分数记录数,\n       ROUND(AVG(ScoreValue), 2) AS 平均分\nFROM HR_PERFORMANCE\nGROUP BY PeriodCode\nORDER BY PeriodCode;",
+      "expected": {
+        "columns": [
+          "考核周期",
+          "记录数",
+          "有分数记录数",
+          "平均分"
+        ],
+        "row_count": 2,
+        "rows": [
+          [
+            "2025H2",
+            149,
+            127,
+            83.24
+          ],
+          [
+            "2026H1",
+            166,
+            154,
+            82.41
+          ]
+        ],
+        "content_hash": "632cd1386ba8746d7b753ae17218d1dbbf1cef05d038cff6e8da4bd2a9e58da6",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "以为 AVG 会把 NULL 当 0：AVG 跳过 NULL，分母是“有分人数”不是“记录数”，两者差 22 / 12 人。",
+        "把未参评者按 0 分计入平均：会显著拉低均分，是不小的口径错误。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "AVG 跳过 NULL 两引擎一致。",
+      "tags": [
+        "AVG",
+        "NULL",
+        "绩效",
+        "ROUND"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q013",
+      "seq": 13,
+      "title": "基准日在职主职人数——两种口径差 4 人",
+      "subject": "组织",
+      "level": 3,
+      "knowledge_point": "某时点在职口径（时间区间去重）",
+      "secondary_points": [
+        "时间区间判断",
+        "基准日写死",
+        "去重"
+      ],
+      "stem": "一张报表要“截至基准日 2026-06-30 的在职人数”。有人用 EndDate IS NULL 算得 170，用工号表 TermDate IS NULL 也算得 170，但按“基准日当天仍有效的主职任职”算是 174，两边对不上，需要先把口径定下来。",
+      "requirement": "用“基准日有效主职任职”口径统计基准日在职人数（按人去重）：StartDate <= '2026-06-30' 且 (EndDate IS NULL OR EndDate >= '2026-06-30') 且 IsPrimary = 1。可用视图 V_EMP_ASSIGNMENT。",
+      "output_hint": "一个数字：基准日在职主职人数。正确答案 174。",
+      "hint": "关键在“结束日”要按区间判断（>= 基准日 或 为空），而不是只看它是否为空。",
+      "reference_sql": "SELECT COUNT(DISTINCT EmpNo) AS 基准日在职主职人数\nFROM dbo.V_EMP_ASSIGNMENT\nWHERE StartDate <= '2026-06-30'\n  AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n  AND IsPrimary = 1;",
+      "reference_sql_sqlite": "SELECT COUNT(DISTINCT EmpNo) AS 基准日在职主职人数\nFROM V_EMP_ASSIGNMENT\nWHERE StartDate <= '2026-06-30'\n  AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n  AND IsPrimary = 1;",
+      "expected": {
+        "columns": [
+          "基准日在职主职人数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            174
+          ]
+        ],
+        "content_hash": "6a2169143699673152a2ff2703be044350704b829ed838e85d04087a2589f3de",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "只用 EndDate IS NULL：会漏掉 4 名“已提离职、但离职日在基准日之后”的人（其任职段结束日已填且在基准日之后），得 170。",
+        "把兼岗(IsPrimary = 0)也算进来：人数虚高。",
+        "忘了 StartDate <= 基准日：会把基准日之后才生效的任职也算了进来。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "基准日 '2026-06-30' 一律写死，禁用 GETDATE() / date('now')；日期在 SQLite 为 TEXT，区间比较按文本进行。",
+      "tags": [
+        "时间区间",
+        "基准日",
+        "去重",
+        "口径"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q014",
+      "seq": 14,
+      "title": "在职却从未参加过考核的人",
+      "subject": "绩效",
+      "level": 3,
+      "knowledge_point": "LEFT JOIN / NOT EXISTS 找“没有 XX 的人”",
+      "secondary_points": [
+        "反连接",
+        "NOT EXISTS"
+      ],
+      "stem": "HRBP 要核对“为什么有些人查不到绩效”。有些在职员工确实一条考核记录都没有（如新入职不满 90 天），需要单列出来说明。",
+      "requirement": "找出在职(TermDate 为空)但从未出现在绩效表(HR_PERFORMANCE)中的员工，输出工号、姓名，按工号升序。",
+      "output_hint": "两列：工号、姓名；预期 8 行。",
+      "hint": "两种写法都行：LEFT JOIN 绩效表后筛 p.EmpNo IS NULL，或用 NOT EXISTS 相关子查询。",
+      "reference_sql": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名\nFROM dbo.HR_EMPLOYEE e\nWHERE e.TermDate IS NULL\n  AND NOT EXISTS (SELECT 1 FROM dbo.HR_PERFORMANCE p WHERE p.EmpNo = e.EmpNo)\nORDER BY e.EmpNo;",
+      "reference_sql_sqlite": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名\nFROM HR_EMPLOYEE e\nWHERE e.TermDate IS NULL\n  AND NOT EXISTS (SELECT 1 FROM HR_PERFORMANCE p WHERE p.EmpNo = e.EmpNo)\nORDER BY e.EmpNo;",
+      "expected": {
+        "columns": [
+          "工号",
+          "姓名"
+        ],
+        "row_count": 8,
+        "rows": [
+          [
+            "10042",
+            "戴燕芬"
+          ],
+          [
+            "10066",
+            "孔敏"
+          ],
+          [
+            "10069",
+            "张伟"
+          ],
+          [
+            "10081",
+            "黄艳洁"
+          ],
+          [
+            "10110",
+            "王霞"
+          ],
+          [
+            "10111",
+            "吕亮"
+          ],
+          [
+            "10148",
+            "石超磊"
+          ],
+          [
+            "10153",
+            "戴静洁"
+          ]
+        ],
+        "content_hash": "84ddbdaafd3f8dc63ff296855250fbace2f070d389239e4de324ca8e6ba1debf",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 INNER JOIN 找“有考核”的思路去取反时，容易把“有考核记录但分数为 NULL”和“根本没记录”混为一谈——要按“有没有行”判断，不是按分数有没有值。",
+        "忘了限定在职：会把已离职、也没考核的人一并列进来。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "LEFT JOIN / NOT EXISTS 两引擎一致。",
+      "tags": [
+        "NOT EXISTS",
+        "反连接",
+        "绩效",
+        "在职"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q015",
+      "seq": 15,
+      "title": "各组织类型下的组织数（名称翻译要去空格）",
+      "subject": "组织",
+      "level": 3,
+      "knowledge_point": "JOIN 字典表做代码翻译（码值表尾空格陷阱）",
+      "secondary_points": [
+        "TRIM 去空格",
+        "双键关联字典"
+      ],
+      "stem": "组织架构盘点要按“组织类型的中文名”统计。字典表里 '部门 '、'工厂 ' 这些名称尾部带了空格，照抄分组会凭空多出一类。",
+      "requirement": "统计各组织类型下的组织数量，类型名称用字典(HR_DICT, DictType='ORG_TYPE')翻译成中文，名称需去掉首尾空格，按组织数降序。",
+      "output_hint": "两列：组织类型、组织数；预期 5 行。",
+      "hint": "用 TRIM（或 LTRIM+RTRIM）去掉名称首尾空格后再分组；字典要靠 DictType + Code 两把钥匙关联。",
+      "reference_sql": "SELECT LTRIM(RTRIM(d.Title)) AS 组织类型, COUNT(*) AS 组织数\nFROM dbo.HR_ORG  o\nJOIN dbo.HR_DICT d ON d.DictType = 'ORG_TYPE' AND d.Code = o.OrgTypeCode\nGROUP BY d.Code, LTRIM(RTRIM(d.Title))\nORDER BY COUNT(*) DESC;",
+      "reference_sql_sqlite": "SELECT TRIM(d.Title) AS 组织类型, COUNT(*) AS 组织数\nFROM HR_ORG  o\nJOIN HR_DICT d ON d.DictType = 'ORG_TYPE' AND d.Code = o.OrgTypeCode\nGROUP BY d.Code, TRIM(d.Title)\nORDER BY COUNT(*) DESC;",
+      "expected": {
+        "columns": [
+          "组织类型",
+          "组织数"
+        ],
+        "row_count": 5,
+        "rows": [
+          [
+            "班组",
+            23
+          ],
+          [
+            "部门",
+            12
+          ],
+          [
+            "中心",
+            2
+          ],
+          [
+            "工厂",
+            2
+          ],
+          [
+            "公司",
+            1
+          ]
+        ],
+        "content_hash": "0a2af7b24b52fc95ad82fde9707e9459d1955da354ab253f02ad713f4938ed68",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "直接用字典 Title 分组：'部门 ' 与 '部门' 会被当成两类（本库恰有 3 条 Title 带尾空格）。",
+        "只按 Code 关联而漏了 DictType：字典里 Code 在不同类型下会重复（例如 'S'），会关联到别的类型的名称。",
+        "用等值比较 '部门' = d.Title 去过滤：在 SQLite 下逐字比较会漏掉 '部门 '（SQL Server 默认排序规则会忽略尾空格，两边结果不同，务必用 TRIM 统一）。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "SQL Server 2017+ 有 TRIM()，更稳妥用 LTRIM(RTRIM())；SQLite 用 TRIM()。尾空格比较两引擎默认行为不同，故本题强制去空格后再分组。",
+      "tags": [
+        "字典",
+        "JOIN",
+        "TRIM",
+        "尾空格"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q016",
+      "seq": 16,
+      "title": "全年薪酬高于人均的员工有多少",
+      "subject": "薪酬",
+      "level": 3,
+      "knowledge_point": "标量子查询（与聚合结果比较）",
+      "secondary_points": [
+        "子查询",
+        "跨币种限制"
+      ],
+      "stem": "薪酬分析要“12 个月累计实发高于全司人均累计实发”的员工规模。注意先按人把 12 个月加总，再和人均水平比，而不是拿单月数字去比。",
+      "requirement": "仅看人民币(CNY)记录，找出“每个人 12 个月累计实发金额(NetPay)”高于“全司人均累计实发金额”的员工人数。",
+      "output_hint": "一个数字：人数。正确答案 87。",
+      "hint": "先 GROUP BY EmpNo 求每人合计，再用标量子查询求出“人均合计”做比较。",
+      "reference_sql": "SELECT COUNT(*) AS 人数\nFROM (SELECT EmpNo, SUM(NetPay) AS tot\n      FROM dbo.HR_SALARY WHERE CurrencyCode = 'CNY' GROUP BY EmpNo) t\nWHERE t.tot > (SELECT AVG(x.tot)\n               FROM (SELECT EmpNo, SUM(NetPay) AS tot\n                     FROM dbo.HR_SALARY WHERE CurrencyCode = 'CNY' GROUP BY EmpNo) x);",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 人数\nFROM (SELECT EmpNo, SUM(NetPay) AS tot\n      FROM HR_SALARY WHERE CurrencyCode = 'CNY' GROUP BY EmpNo) t\nWHERE t.tot > (SELECT AVG(x.tot)\n               FROM (SELECT EmpNo, SUM(NetPay) AS tot\n                     FROM HR_SALARY WHERE CurrencyCode = 'CNY' GROUP BY EmpNo) x);",
+      "expected": {
+        "columns": [
+          "人数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            87
+          ]
+        ],
+        "content_hash": "dab178d6cbfe899549559abc6358ab9ffff339e286be25e0714f63158aabf0b0",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "拿单一行的 NetPay 与人均比：口径错了，几乎人人都“高于”。",
+        "不限制 CurrencyCode：把外币也加进来，结果无意义。",
+        "把人均误解为“每人每月平均”而不是“每人累计平均”：分母口径不同，答案会变。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "标量子查询两引擎一致。",
+      "tags": [
+        "子查询",
+        "标量子查询",
+        "薪酬",
+        "跨币种"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q017",
+      "seq": 17,
+      "title": "挂了却一直没有候选人的招聘需求",
+      "subject": "招聘",
+      "level": 3,
+      "knowledge_point": "相关子查询 / NOT EXISTS",
+      "secondary_points": [
+        "反连接",
+        "状态与日期一致性"
+      ],
+      "stem": "招聘漏斗盘点要找出“开了需求却一个候选人都没进”的需求单——可能是渠道投放漏了，也可能需求挂着没真正启动。",
+      "requirement": "找出在候选人表(HR_CANDIDATE)中没有任何记录的需求单，输出需求编号、状态码，按需求编号升序。",
+      "output_hint": "两列：需求编号、状态码；预期 3 行。",
+      "hint": "NOT EXISTS 相关子查询最稳；也可以用 LEFT JOIN 后筛 IS NULL。",
+      "reference_sql": "SELECT r.ReqNo AS 需求编号, r.StatusCode AS 状态码\nFROM dbo.HR_RECRUIT_REQ r\nWHERE NOT EXISTS (SELECT 1 FROM dbo.HR_CANDIDATE c WHERE c.ReqNo = r.ReqNo)\nORDER BY r.ReqNo;",
+      "reference_sql_sqlite": "SELECT r.ReqNo AS 需求编号, r.StatusCode AS 状态码\nFROM HR_RECRUIT_REQ r\nWHERE NOT EXISTS (SELECT 1 FROM HR_CANDIDATE c WHERE c.ReqNo = r.ReqNo)\nORDER BY r.ReqNo;",
+      "expected": {
+        "columns": [
+          "需求编号",
+          "状态码"
+        ],
+        "row_count": 3,
+        "rows": [
+          [
+            "REQ250001",
+            "PENDING"
+          ],
+          [
+            "REQ250002",
+            "ONGOING"
+          ],
+          [
+            "REQ250003",
+            "CLOSED"
+          ]
+        ],
+        "content_hash": "1903ec2a0a7f1c087066de935a5bb3813e2d67c3c25d2df2970126d03ca1d136",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 NOT IN (SELECT ReqNo FROM HR_CANDIDATE)：一旦子查询结果含 NULL，整个 NOT IN 会返回空集（本表 ReqNo 非空，但这是必须养成的习惯）。",
+        "只用候选人条数不按键分组：根本筛不出“零候选人”的需求。",
+        "别忘了还有状态与日期不一致的脏数据（进行中却已填关闭日、已关闭却无关闭日），本题按“有无候选人”判定，与状态列无关。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎一致。",
+      "tags": [
+        "NOT EXISTS",
+        "相关子查询",
+        "招聘",
+        "反连接"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q018",
+      "seq": 18,
+      "title": "每人最新一期薪酬怎么取",
+      "subject": "薪酬",
+      "level": 3,
+      "knowledge_point": "ROW_NUMBER() 取每组第一条",
+      "secondary_points": [
+        "窗口函数",
+        "按人分组取最新"
+      ],
+      "stem": "薪酬快照要“每位员工最近一个月的实发工资”。月份是 YYYYMM 文本，跨年时直接取字符串最大值容易踩坑，用窗口函数更稳。",
+      "requirement": "取每位员工 SalaryMonth 最大（最新）的那一期薪酬记录，输出工号、月份、实发工资，按工号升序。",
+      "output_hint": "三列：工号、月份、实发工资；预期 200 行（每人一行）。",
+      "hint": "ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY SalaryMonth DESC)，再取 rn = 1。",
+      "reference_sql": "SELECT 工号, 月份, 实发工资\nFROM (SELECT EmpNo AS 工号, SalaryMonth AS 月份, NetPay AS 实发工资,\n             ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY SalaryMonth DESC) AS rn\n      FROM dbo.HR_SALARY) t\nWHERE t.rn = 1\nORDER BY 工号;",
+      "reference_sql_sqlite": "SELECT 工号, 月份, 实发工资\nFROM (SELECT EmpNo AS 工号, SalaryMonth AS 月份, NetPay AS 实发工资,\n             ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY SalaryMonth DESC) AS rn\n      FROM HR_SALARY) t\nWHERE t.rn = 1\nORDER BY 工号;",
+      "expected": {
+        "columns": [
+          "工号",
+          "月份",
+          "实发工资"
+        ],
+        "row_count": 200,
+        "rows": [
+          [
+            "10001",
+            "202606",
+            20090.3
+          ],
+          [
+            "10002",
+            "202606",
+            7075.96
+          ],
+          [
+            "10003",
+            "202603",
+            19524.68
+          ],
+          [
+            "10004",
+            "202606",
+            7208.32
+          ],
+          [
+            "10005",
+            "202606",
+            18129.85
+          ],
+          [
+            "10006",
+            "202606",
+            20432.7
+          ],
+          [
+            "10007",
+            "202606",
+            6751.97
+          ],
+          [
+            "10008",
+            "202606",
+            19779.65
+          ],
+          [
+            "10009",
+            "202606",
+            7277.63
+          ],
+          [
+            "1001",
+            "202606",
+            16679.66
+          ],
+          [
+            "10010",
+            "202606",
+            23442.03
+          ],
+          [
+            "10011",
+            "202606",
+            7077.15
+          ],
+          [
+            "10012",
+            "202606",
+            5635.91
+          ],
+          [
+            "10013",
+            "202606",
+            7973.06
+          ],
+          [
+            "10014",
+            "202606",
+            20670.38
+          ],
+          [
+            "10015",
+            "202606",
+            5940.56
+          ],
+          [
+            "10016",
+            "202606",
+            23025.23
+          ],
+          [
+            "10017",
+            "202606",
+            18003.84
+          ],
+          [
+            "10018",
+            "202606",
+            6837.54
+          ],
+          [
+            "10019",
+            "202601",
+            18773.91
+          ],
+          [
+            "1002",
+            "202606",
+            7247.59
+          ],
+          [
+            "10020",
+            "202606",
+            6810.1
+          ],
+          [
+            "10021",
+            "202606",
+            7371.14
+          ],
+          [
+            "10022",
+            "202606",
+            21757.95
+          ],
+          [
+            "10023",
+            "202606",
+            16826.82
+          ],
+          [
+            "10024",
+            "202606",
+            16072.67
+          ],
+          [
+            "10025",
+            "202606",
+            16732.19
+          ],
+          [
+            "10026",
+            "202606",
+            22342.39
+          ],
+          [
+            "10027",
+            "202606",
+            21991.04
+          ],
+          [
+            "10028",
+            "202606",
+            14364.76
+          ],
+          [
+            "10029",
+            "202606",
+            6860.22
+          ],
+          [
+            "1003",
+            "202606",
+            1058.52
+          ],
+          [
+            "10030",
+            "202606",
+            7469.44
+          ],
+          [
+            "10031",
+            "202602",
+            2434.9
+          ],
+          [
+            "10032",
+            "202509",
+            2230.64
+          ],
+          [
+            "10033",
+            "202606",
+            17990.03
+          ],
+          [
+            "10034",
+            "202606",
+            19554.95
+          ],
+          [
+            "10035",
+            "202606",
+            6365.94
+          ],
+          [
+            "10036",
+            "202606",
+            20305.74
+          ],
+          [
+            "10037",
+            "202606",
+            18518.51
+          ],
+          [
+            "10038",
+            "202606",
+            6797.05
+          ],
+          [
+            "10039",
+            "202606",
+            22347.96
+          ],
+          [
+            "1004",
+            "202606",
+            18853.01
+          ],
+          [
+            "10040",
+            "202606",
+            15790.08
+          ],
+          [
+            "10041",
+            "202606",
+            2841.83
+          ],
+          [
+            "10042",
+            "202606",
+            15239.61
+          ],
+          [
+            "10043",
+            "202606",
+            18167.07
+          ],
+          [
+            "10044",
+            "202606",
+            15626.15
+          ],
+          [
+            "10045",
+            "202507",
+            7560.42
+          ],
+          [
+            "10046",
+            "202606",
+            21431.26
+          ]
+        ],
+        "content_hash": "796a58129ada1c0668415287ca87af8f19f409911c3f8e9cdc1ebcbcfb9a0e30",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用自连接 MAX(SalaryMonth) 时忘了把月份也一起关联，导致取到别的行。",
+        "以为 NetPay 最大就是最新一期：应按月份取，不是按金额取。",
+        "误以为有人本月薪酬为 NULL 就该整行丢掉：稳的做法是每人至少保证出一行。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "窗口函数两引擎语法一致；月份为 YYYYMM 文本，字典序 = 时间序，可直接比较。",
+      "tags": [
+        "ROW_NUMBER",
+        "窗口函数",
+        "薪酬",
+        "最新一期"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q019",
+      "seq": 19,
+      "title": "哪些岗位超编了（实配 > 编制）",
+      "subject": "组织",
+      "level": 4,
+      "knowledge_point": "聚合 + JOIN 求编制 vs 实配（视图）",
+      "secondary_points": [
+        "视图 V_ORG_HEADCOUNT",
+        "差额口径"
+      ],
+      "stem": "人力预算要“超编岗位”清单。编制数来自岗位表，实配人数要按基准日在职主职现算，两者口径必须一致（同一个基准日）。",
+      "requirement": "用视图 V_ORG_HEADCOUNT，找出差额(GapCount)小于 0（实配 > 编制）的岗位，输出岗位编码、组织名、岗位名、编制数、实配数、差额，按差额升序、岗位编码升序。",
+      "output_hint": "六列；预期 25 行。",
+      "hint": "GapCount = 编制数 - 实配数，小于 0 就是超编。",
+      "reference_sql": "SELECT PositionCode AS 岗位编码, OrgName AS 组织名, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, GapCount AS 差额\nFROM dbo.V_ORG_HEADCOUNT\nWHERE GapCount < 0\nORDER BY GapCount ASC, PositionCode ASC;",
+      "reference_sql_sqlite": "SELECT PositionCode AS 岗位编码, OrgName AS 组织名, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, GapCount AS 差额\nFROM V_ORG_HEADCOUNT\nWHERE GapCount < 0\nORDER BY GapCount ASC, PositionCode ASC;",
+      "expected": {
+        "columns": [
+          "岗位编码",
+          "组织名",
+          "岗位名",
+          "编制数",
+          "实配数",
+          "差额"
+        ],
+        "row_count": 25,
+        "rows": [
+          [
+            "POS032",
+            "一班",
+            "生产主管",
+            2,
+            7,
+            -5
+          ],
+          [
+            "POS050",
+            "仓储组",
+            "生产主管",
+            2,
+            7,
+            -5
+          ],
+          [
+            "POS004",
+            "二班",
+            "生产操作员",
+            1,
+            5,
+            -4
+          ],
+          [
+            "POS040",
+            "维修班",
+            "生产操作员",
+            1,
+            5,
+            -4
+          ],
+          [
+            "POS042",
+            "维修班",
+            "生产经理",
+            1,
+            5,
+            -4
+          ],
+          [
+            "POS048",
+            "动力班",
+            "生产经理",
+            2,
+            6,
+            -4
+          ],
+          [
+            "POS007",
+            "三班",
+            "生产操作员",
+            2,
+            5,
+            -3
+          ],
+          [
+            "POS016",
+            "二班",
+            "生产操作员",
+            1,
+            4,
+            -3
+          ],
+          [
+            "POS017",
+            "二班",
+            "生产主管",
+            1,
+            4,
+            -3
+          ],
+          [
+            "POS053",
+            "配送组",
+            "生产主管",
+            1,
+            4,
+            -3
+          ],
+          [
+            "POS001",
+            "一班",
+            "生产操作员",
+            3,
+            5,
+            -2
+          ],
+          [
+            "POS002",
+            "一班",
+            "生产主管",
+            1,
+            3,
+            -2
+          ],
+          [
+            "POS012",
+            "四班",
+            "生产经理",
+            1,
+            3,
+            -2
+          ],
+          [
+            "POS019",
+            "三班",
+            "生产操作员",
+            1,
+            3,
+            -2
+          ],
+          [
+            "POS024",
+            "一班",
+            "生产经理",
+            1,
+            3,
+            -2
+          ],
+          [
+            "POS043",
+            "电气班",
+            "生产操作员",
+            4,
+            6,
+            -2
+          ],
+          [
+            "POS049",
+            "仓储组",
+            "生产操作员",
+            4,
+            6,
+            -2
+          ],
+          [
+            "POS055",
+            "工艺一组",
+            "工艺工程师",
+            3,
+            5,
+            -2
+          ],
+          [
+            "POS018",
+            "二班",
+            "生产经理",
+            1,
+            2,
+            -1
+          ],
+          [
+            "POS023",
+            "一班",
+            "生产主管",
+            4,
+            5,
+            -1
+          ],
+          [
+            "POS030",
+            "三班",
+            "生产经理",
+            2,
+            3,
+            -1
+          ],
+          [
+            "POS033",
+            "一班",
+            "生产经理",
+            2,
+            3,
+            -1
+          ],
+          [
+            "POS036",
+            "二班",
+            "生产经理",
+            2,
+            3,
+            -1
+          ],
+          [
+            "POS047",
+            "动力班",
+            "生产主管",
+            4,
+            5,
+            -1
+          ],
+          [
+            "POS054",
+            "配送组",
+            "生产经理",
+            3,
+            4,
+            -1
+          ]
+        ],
+        "content_hash": "726cc59d59f5d5d513f539ec2f5f5c54237b7195b5d8500892bd8884a134f8b8",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "自己 JOIN 算实配时忘了加时间条件与 IsPrimary = 1：实配数失真，差额跟着错。",
+        "把编制与实配只按 JobCode 关联（而不是按组织 + 岗位）：同一个岗位编码会出现在多个组织，只按 JobCode 关联会多算。",
+        "假定编制数等于实配数：超编 / 缺编 / 零实配是常态（本库超编 25 个、零实配 9 个）。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "视图内的 ISNULL → IFNULL 已在 SQLite 视图定义中处理；查询层无差异。",
+      "tags": [
+        "视图",
+        "V_ORG_HEADCOUNT",
+        "编制",
+        "超编"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q020",
+      "seq": 20,
+      "title": "组织树一共几层、每层几个",
+      "subject": "组织",
+      "level": 4,
+      "knowledge_point": "递归 CTE / 组织树（视图 V_ORG_TREE）",
+      "secondary_points": [
+        "递归",
+        "层级统计"
+      ],
+      "stem": "组织架构治理要“组织树一共几层、每层多少个”。组织表是 ParentID 自关联，层级无法直接读出，必须用递归算。",
+      "requirement": "基于组织树视图 V_ORG_TREE，统计各层级(Depth)的组织数量，输出层级、组织数，按层级升序。",
+      "output_hint": "两列：层级、组织数；预期 4 行（1/2/3/4 层）。",
+      "hint": "V_ORG_TREE 就是用递归 CTE 算出的组织树（含 Depth 与 OrgPath）；也可以自己写 WITH 递归来算。",
+      "reference_sql": "SELECT Depth AS 层级, COUNT(*) AS 组织数\nFROM dbo.V_ORG_TREE\nGROUP BY Depth\nORDER BY Depth;",
+      "reference_sql_sqlite": "SELECT Depth AS 层级, COUNT(*) AS 组织数\nFROM V_ORG_TREE\nGROUP BY Depth\nORDER BY Depth;",
+      "expected": {
+        "columns": [
+          "层级",
+          "组织数"
+        ],
+        "row_count": 4,
+        "rows": [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            3,
+            12
+          ],
+          [
+            4,
+            23
+          ]
+        ],
+        "content_hash": "a0c0dc5f5f0fd5993719e6c687357c8320e2a1831fa3a7836d26051ce677e420",
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用自连接硬拼层级：组织至少 4 层，写死 JOIN 次数无法通用。",
+        "忘了递归锚点（ParentID IS NULL 的顶级）或把递归方向写反，会漏行或多行。",
+        "把 OrgLevel 字段当作层数直接用：本库二者恰好一致，但一旦出现层级与 Level 编码不等的情况就会错，应依赖树结构算出的 Depth。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "SQLite 递归 CTE 必须写 WITH RECURSIVE；SQL Server 写 WITH 即可；字符串拼接 SQLite 用 ||、SQL Server 用 +。",
+      "tags": [
+        "递归CTE",
+        "视图",
+        "V_ORG_TREE",
+        "组织树"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-09"
+    }
+  ]
+}

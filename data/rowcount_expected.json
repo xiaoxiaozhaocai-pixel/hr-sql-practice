@@ -1,0 +1,18 @@
+{
+  "HR_DICT": 73,
+  "HR_ORG": 40,
+  "HR_JOB": 25,
+  "HR_EMPLOYEE": 200,
+  "HR_POSITION": 60,
+  "HR_ASSIGNMENT": 243,
+  "HR_SALARY": 1868,
+  "HR_ATTENDANCE": 1868,
+  "HR_RECRUIT_REQ": 30,
+  "HR_CANDIDATE": 120,
+  "HR_PERFORMANCE": 315,
+  "_meta": {
+    "parsed_from": "seed_mssql.sql",
+    "insert_statements": 37,
+    "total_tuples": 4842
+  }
+}
