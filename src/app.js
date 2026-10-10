@@ -19,6 +19,11 @@
   var QUESTIONS = Array.isArray(BOOT.questions) ? BOOT.questions : [];
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
   var L = window.HRLevels;
+  var T = window.HRTables;
+  var MODEL_NOTES = BOOT.modelNotes || null;
+
+  /* 题 seq -> 涉及的表名（唯一权威源：docs/model-notes-v1.json 的 questions[].tables） */
+  var TABLE_MAP = (T && MODEL_NOTES) ? T.questionTableMap(MODEL_NOTES.questions) : {};
 
   var SECTIONS = L ? L.buildSections(QUESTIONS) : [];
   var QUESTION_BY_ID = {};
@@ -217,6 +222,115 @@
     btn.textContent = seen >= list.length && list.length ? '提示已全部解锁' : '再看一条';
   }
 
+  /* ------------------------------ 表结构速查 ------------------------------ */
+  /* 只渲染结构（表名 / 中文名 / 字段 / 类型 / 可空 / 业务含义），数据行一律不出现。 */
+  function buildFieldTable(table, matchedFields) {
+    var mark = {};
+    (matchedFields || []).forEach(function (n) { mark[String(n).toUpperCase()] = true; });
+    var tbl = el('table', null, 'field-table');
+    var thead = document.createElement('thead');
+    var htr = document.createElement('tr');
+    ['字段', '类型', '可空', '业务含义'].forEach(function (h) { htr.appendChild(el('th', h)); });
+    thead.appendChild(htr);
+    tbl.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    table.fields.forEach(function (f) {
+      var tr = document.createElement('tr');
+      if (mark[f.name.toUpperCase()]) tr.className = 'is-match';
+      tr.appendChild(el('td', f.name, 'f-name'));
+      tr.appendChild(el('td', f.type, 'f-type'));
+      tr.appendChild(el('td', f.nullable ? '是' : '否', 'f-null'));
+      tr.appendChild(el('td', f.note, 'f-note'));
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    return tbl;
+  }
+
+  function tableChip(name, matchedFields, open) {
+    var t = T ? T.getTable(name) : null;
+    var det = document.createElement('details');
+    det.className = 'tbl-chip';
+    if (open) det.open = true;
+    var sum = document.createElement('summary');
+    sum.appendChild(el('span', name, 'tbl-chip-name'));
+    if (t) {
+      sum.appendChild(el('span', t.cn_name, 'tbl-chip-cn'));
+      sum.appendChild(el('span', t.fields.length + ' 字段', 'tbl-chip-count'));
+    } else {
+      sum.appendChild(el('span', '（结构表未登记）', 'tbl-chip-cn'));
+    }
+    det.appendChild(sum);
+    if (t) {
+      var body = el('div', null, 'tbl-chip-body');
+      if (t.role) body.appendChild(el('div', '业务角色：' + t.role, 'tbl-role'));
+      body.appendChild(buildFieldTable(t, matchedFields));
+      det.appendChild(body);
+    }
+    return det;
+  }
+
+  /* 每题题干预设区：列出该题涉及的表，点开看全字段。标题用「涉及的表 / 字段」。 */
+  function renderQuestionTables(q) {
+    var block = $('q-tables-block');
+    var box = $('q-tables');
+    if (!block || !box) return;
+    if (!T || !MODEL_NOTES) { show(block, false); return; }
+    var names = TABLE_MAP[q.seq] || [];
+    if (!names.length) { show(block, false); return; }
+    box.textContent = '';
+    names.forEach(function (n) { box.appendChild(tableChip(n, [], false)); });
+    show(block, true);
+  }
+
+  /* 左栏「表结构」页签：可搜索、可点开；末尾附 3 个视图（只列作用）。 */
+  function renderTablesPanel(keyword) {
+    var list = $('tables-list');
+    if (!list || !T) return;
+    var kw = String(keyword || '').trim();
+    list.textContent = '';
+    var results = T.searchTables(kw);
+    if (!results.length) {
+      list.appendChild(el('div', '没有匹配的表或字段。', 'note'));
+    } else {
+      results.forEach(function (r) { list.appendChild(tableChip(r.table.name, r.matchedFields, false)); });
+    }
+    var lower = kw.toLowerCase();
+    var views = T.allViews().filter(function (v) {
+      return !kw || v.name.toLowerCase().indexOf(lower) !== -1 || v.purpose.toLowerCase().indexOf(lower) !== -1;
+    });
+    if (views.length) {
+      list.appendChild(el('div', '视图（只列作用，无字段明细）', 'tables-subhead'));
+      views.forEach(function (v) {
+        var row = el('div', null, 'view-row');
+        row.appendChild(el('span', v.name, 'tbl-chip-name'));
+        row.appendChild(el('span', v.purpose, 'tbl-chip-cn'));
+        list.appendChild(row);
+      });
+    }
+  }
+
+  function bindSidebarTabs() {
+    var tl = $('tab-levels');
+    var tt = $('tab-tables');
+    if (!tl || !tt) return;
+    function activate(tablesOn) {
+      tl.classList.toggle('is-active', !tablesOn);
+      tt.classList.toggle('is-active', tablesOn);
+      tl.setAttribute('aria-selected', String(!tablesOn));
+      tt.setAttribute('aria-selected', String(tablesOn));
+      var pl = $('panel-levels');
+      var pt = $('panel-tables');
+      if (pl) pl.hidden = tablesOn;
+      if (pt) pt.hidden = !tablesOn;
+    }
+    tl.addEventListener('click', function () { activate(false); });
+    tt.addEventListener('click', function () { activate(true); });
+    var search = $('tables-search');
+    if (search) search.addEventListener('input', function () { renderTablesPanel(this.value); });
+    renderTablesPanel('');
+  }
+
   /* ------------------------------ 单关渲染 ------------------------------ */
   function renderDetail() {
     var q = currentQuestion();
@@ -243,6 +357,8 @@
     $('q-stem').textContent = q.stem || '';
     $('q-requirement').textContent = q.requirement || '';
     $('q-output').textContent = q.output_hint || '';
+
+    renderQuestionTables(q);
 
     var sqlInput = $('sql-input');
     sqlInput.value = state.sql[q.id] || '';
@@ -472,6 +588,81 @@
     show($('answer-block'), true);
   }
 
+  /* ------------------------------ 编辑器字段补全 ------------------------------ */
+  /* 补全口径：token 以 HR_ 开头（或含下划线）→ 补表名；其余情况 → 补「SQL 里已出现的表」
+     的字段名，没出现过表名时回退到本题涉及表的字段名。不弹出任何数据行。 */
+  function sqlSuggestions(text, caret) {
+    if (!T) return [];
+    var before = text.slice(0, caret);
+    var m = before.match(/([A-Za-z_][A-Za-z0-9_]*)$/);
+    var token = m ? m[1] : '';
+    if (!token) return [];
+    var prefix = token.toUpperCase();
+    var upperText = text.toUpperCase();
+    var items = [];
+    var seen = {};
+    function push(label, detail, insert) {
+      var k = label.toUpperCase();
+      if (seen[k]) return;
+      seen[k] = true;
+      items.push({ label: label, detail: detail, insert: insert });
+    }
+    var isTableToken = prefix.indexOf('HR_') === 0 || token.indexOf('_') !== -1;
+    if (isTableToken) {
+      T.allTables().forEach(function (t) {
+        if (t.name.toUpperCase().indexOf(prefix) === 0) push(t.name, t.cn_name, t.name);
+      });
+      return items.slice(0, 12);
+    }
+    var namesInText = T.allTables().map(function (t) { return t.name; })
+      .filter(function (n) { return upperText.indexOf(n) !== -1; });
+    var q = currentQuestion();
+    if (!namesInText.length && q) namesInText = TABLE_MAP[q.seq] || [];
+    namesInText.forEach(function (n) {
+      T.fieldNames(n).forEach(function (f) {
+        if (f.toUpperCase().indexOf(prefix) === 0) push(f, n, f);
+      });
+    });
+    return items.slice(0, 12);
+  }
+
+  function hideSuggest() {
+    var box = $('sql-suggest');
+    if (box) { box.hidden = true; box.textContent = ''; }
+  }
+
+  function updateSuggest() {
+    var box = $('sql-suggest');
+    var ta = $('sql-input');
+    if (!box || !ta) return;
+    if (document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) { hideSuggest(); return; }
+    var items = sqlSuggestions(ta.value, ta.selectionStart);
+    if (!items.length) { hideSuggest(); return; }
+    box.textContent = '';
+    items.forEach(function (it) {
+      var b = el('button', null, 'sql-suggest-item');
+      b.type = 'button';
+      b.appendChild(el('span', it.label, 's-label'));
+      if (it.detail) b.appendChild(el('span', it.detail, 's-detail'));
+      b.addEventListener('mousedown', function (e) { e.preventDefault(); applySuggest(it); });
+      box.appendChild(b);
+    });
+    box.hidden = false;
+  }
+
+  function applySuggest(it) {
+    var ta = $('sql-input');
+    var caret = ta.selectionStart;
+    var m = ta.value.slice(0, caret).match(/([A-Za-z_][A-Za-z0-9_]*)$/);
+    var start = m ? caret - m[1].length : caret;
+    ta.value = ta.value.slice(0, start) + it.insert + ta.value.slice(caret);
+    var pos = start + it.insert.length;
+    ta.selectionStart = ta.selectionEnd = pos;
+    hideSuggest();
+    onSqlEdit();
+    ta.focus();
+  }
+
   /* ------------------------------ 事件绑定 ------------------------------ */
   function bindUi() {
     $('btn-hint').addEventListener('click', revealNextHint);
@@ -491,6 +682,11 @@
       onSqlEdit();
     });
     sqlInput.addEventListener('input', onSqlEdit);
+    sqlInput.addEventListener('blur', function () { hideSuggest(); });
+    sqlInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') hideSuggest();
+    });
+    bindSidebarTabs();
 
     $('btn-drawer').addEventListener('click', function () {
       var sb = document.querySelector('.sidebar');
@@ -519,6 +715,7 @@
     var q = currentQuestion();
     if (q) { state.sql[q.id] = $('sql-input').value; saveProgress(); }
     checkForbidden();
+    updateSuggest();
   }
 
   /* ------------------------------ 启动 ------------------------------ */

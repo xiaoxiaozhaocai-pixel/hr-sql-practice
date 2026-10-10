@@ -49,6 +49,8 @@ function main() {
   const seedSql = readText('data/seed_sqlite.sql');
   const pack = JSON.parse(readText('data/questions.json'));
   const rowcountExpected = JSON.parse(readText('data/rowcount_expected.json'));
+  /* 造数意图：表中文名 / 业务角色 / 每题涉及的表，唯一权威源 docs/model-notes-v1.json */
+  const modelNotes = JSON.parse(readText('docs/model-notes-v1.json'));
 
   if (!Array.isArray(pack.questions) || pack.questions.length === 0) {
     throw new Error('data/questions.json 里没有 questions 数组');
@@ -60,6 +62,7 @@ function main() {
     schemaVersion: pack.schema_version || null,
     questionDb: pack.db || null,
     questions: pack.questions,
+    modelNotes: modelNotes,
     rowcountExpected: rowcountExpected,
     schemaSql: schemaSql,
     seedSql: seedSql,
@@ -73,6 +76,7 @@ function main() {
   html = inject(html, '/*__HR_BOOTSTRAP__*/', escapeScriptClose(JSON.stringify(bootstrap)));
   html = inject(html, '/*__HR_JUDGE__*/', escapeScriptClose(readText('src/judge.js')));
   html = inject(html, '/*__HR_LEVELS__*/', escapeScriptClose(readText('src/levels.js')));
+  html = inject(html, '/*__HR_TABLES__*/', escapeScriptClose(readText('src/tables.js')));
   html = inject(html, '/*__HR_DB__*/', escapeScriptClose(readText('src/db.js')));
   html = inject(html, '/*__HR_APP__*/', escapeScriptClose(readText('src/app.js')));
 

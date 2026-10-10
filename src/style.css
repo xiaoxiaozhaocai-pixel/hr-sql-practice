@@ -156,13 +156,73 @@ pre {
 .diff .k-missing { color: var(--warn); }
 .foot { padding: 12px 16px 24px; color: var(--muted); font-size: 12px; }
 
+/* ---------------- 表结构速查 / 每题涉及的表 ---------------- */
+.sidebar-tabs { display: flex; gap: 4px; }
+.sidebar-tabs .tab {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+}
+.sidebar-tabs .tab:hover { border-color: var(--brand); color: var(--brand); }
+.sidebar-tabs .tab.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.tables-panel[hidden] { display: none; }
+.tables-search {
+  width: 100%; margin: 6px 0; padding: 6px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text);
+}
+.tables-search:focus { outline: 2px solid #c7dbff; border-color: var(--brand); }
+.tables-hint { margin-bottom: 6px; }
+.tables-list { max-height: 66vh; overflow: auto; }
+.tables-subhead { margin: 9px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px solid var(--line); padding-top: 7px; }
+
+.tbl-chip { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 4px; background: #fff; }
+.tbl-chip[open] { border-color: #dbe6ff; background: var(--brand-soft); }
+.tbl-chip > summary {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  padding: 6px 8px; cursor: pointer; font-size: 13px; list-style: none;
+}
+.tbl-chip > summary::-webkit-details-marker { display: none; }
+.tbl-chip > summary::before { content: "\25b8"; color: var(--muted); font-size: 11px; }
+.tbl-chip[open] > summary::before { content: "\25be"; }
+.tbl-chip-name { font-family: var(--mono); font-weight: 700; color: var(--brand-dark); }
+.tbl-chip-cn { color: var(--muted); font-size: 12px; }
+.tbl-chip-count { margin-left: auto; color: var(--muted); font-size: 11px; }
+.tbl-chip-body { padding: 0 8px 8px; }
+.tbl-role { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.view-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 5px 2px; font-size: 12px; }
+
+.field-table { width: 100%; font-family: inherit; font-size: 12px; background: #fff; }
+.field-table th, .field-table td { white-space: normal; vertical-align: top; padding: 3px 5px; }
+.field-table th { font-size: 11px; color: var(--muted); }
+.field-table td.f-name { font-family: var(--mono); color: var(--brand-dark); }
+.field-table td.f-type { font-family: var(--mono); color: var(--muted); }
+.field-table td.f-null { text-align: center; }
+.field-table td.f-note { color: var(--text); }
+.field-table tr.is-match td { background: #fff7d6; }
+
+.q-tables { margin: 12px 0 4px; border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: 8px; padding: 8px 10px; }
+.q-tables-label { font-size: 12px; font-weight: 700; color: var(--brand-dark); margin-bottom: 6px; }
+.q-tables-list { display: flex; flex-direction: column; gap: 4px; }
+
+.sql-suggest {
+  margin-top: 4px; border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  max-height: 180px; overflow: auto; box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+.sql-suggest-item {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  border: none; border-radius: 0; padding: 5px 8px; background: #fff; cursor: pointer;
+}
+.sql-suggest-item:hover { background: var(--brand-soft); color: var(--brand-dark); }
+.sql-suggest-item .s-label { font-family: var(--mono); font-size: 12px; }
+.sql-suggest-item .s-detail { color: var(--muted); font-size: 11px; }
+
 /* ---------------- 窄屏：左栏折叠成顶部抽屉（< 1000px） ---------------- */
 @media (max-width: 1000px) {
   .layout { flex-direction: column; padding: 10px 12px 14px; }
   .sidebar { position: static; width: 100%; flex: 1 1 auto; }
   .drawer-btn { display: inline-block; }
   .sidebar.collapsed .section-nav,
-  .sidebar.collapsed .sidebar-foot { display: none; }
+  .sidebar.collapsed .sidebar-foot,
+  .sidebar.collapsed .tables-panel { display: none; }
   .section-nav { max-height: none; }
   .detail { width: 100%; }
   .dialect-strip { margin: 10px 12px 0; }

@@ -45,11 +45,21 @@
 <main class="layout">
   <aside class="sidebar">
     <div class="sidebar-head">
-      <span class="sidebar-title">关卡主线</span>
+      <div class="sidebar-tabs" role="tablist">
+        <button id="tab-levels" type="button" class="tab is-active" role="tab" aria-selected="true">关卡主线</button>
+        <button id="tab-tables" type="button" class="tab" role="tab" aria-selected="false">表结构</button>
+      </div>
       <button id="btn-drawer" type="button" class="ghost drawer-btn" aria-expanded="true">收起</button>
     </div>
-    <nav id="section-nav" class="section-nav"></nav>
-    <p class="sidebar-foot">四段主线，关卡可任意点击跳转，不锁顺序。</p>
+    <div id="panel-levels">
+      <nav id="section-nav" class="section-nav"></nav>
+      <p class="sidebar-foot">四段主线，关卡可任意点击跳转，不锁顺序。</p>
+    </div>
+    <div id="panel-tables" class="tables-panel" hidden>
+      <input id="tables-search" type="search" class="tables-search" placeholder="搜索表名 / 字段名，如 HR_EMPLOYEE、NetPay" autocomplete="off">
+      <p class="note tables-hint">11 张表 + 3 个视图，只列结构，不含任何数据行。</p>
+      <div id="tables-list" class="tables-list"></div>
+    </div>
   </aside>
 
   <section class="detail">
@@ -69,6 +79,11 @@
 
       <div id="ref-review-block" class="warn" hidden></div>
 
+      <div id="q-tables-block" class="q-tables" hidden>
+        <div class="q-tables-label">涉及的表 / 字段 <span class="note">点表名展开字段清单；只给结构，不含数据行</span></div>
+        <div id="q-tables" class="q-tables-list"></div>
+      </div>
+
       <h3>任务描述</h3>
       <p id="q-stem" class="stem"></p>
       <p id="q-requirement" class="req"></p>
@@ -85,6 +100,7 @@
 
       <h3>你的 SQL</h3>
       <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
+      <div id="sql-suggest" class="sql-suggest" hidden></div>
       <div id="forbidden-warning" class="warn" hidden></div>
       <div class="actions">
         <button id="btn-run" type="button">运行</button>
@@ -137,6 +153,9 @@ window.HR_BOOT = /*__HR_BOOTSTRAP__*/;
 </script>
 <script>
 /*__HR_LEVELS__*/
+</script>
+<script>
+/*__HR_TABLES__*/
 </script>
 <script>
 /*__HR_DB__*/

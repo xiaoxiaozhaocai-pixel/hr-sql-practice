@@ -1,0 +1,254 @@
+{
+  "meta": {
+    "project": "HR 语境 SQL 练习平台",
+    "deliverable": "model_notes.json",
+    "version": "v1",
+    "date": "2026-10-09",
+    "authority": "本文件由业务侧（HRIS 线）编定。schema.sql 与 seed.sql 为唯一权威源，本文件描述其造数意图。",
+    "baseline_date": "2026-06-30",
+    "data_range": ["2025-07-01", "2026-06-30"],
+    "row_counts": {
+      "HR_DICT": 73,
+      "HR_ORG": 40,
+      "HR_JOB": 25,
+      "HR_EMPLOYEE": 200,
+      "HR_POSITION": 60,
+      "HR_ASSIGNMENT": 243,
+      "HR_SALARY": 1868,
+      "HR_ATTENDANCE": 1868,
+      "HR_RECRUIT_REQ": 30,
+      "HR_CANDIDATE": 120,
+      "HR_PERFORMANCE": 315
+    },
+    "hard_rules": [
+      "全库禁用 GETDATE()：一切'当前/今天'的判断一律使用基准日 2026-06-30 写死，否则同一道题每天答案都变，预期结果无法固定。",
+      "数据只能来自 seed.sql，不得由实现方随机生成；预期结果绑定在具体数据上。",
+      "判题比对结果集，不比对 SQL 文本。",
+      "字段只用通用 HR 业务概念，不含任何真实单位的库名、表名、字段名、系统名、组织名或人员信息。"
+    ],
+    "purpose": "本文件供工程侧实现与判题使用：tables 段说明每表规模、边界与刻意埋入的坑；questions 段说明每道题依赖哪些数据特征。表中 rows 与实际行数一致，可作验收对账。"
+  },
+
+  "tables": [
+    {
+      "name": "HR_DICT",
+      "cn_name": "字典（码值表）",
+      "rows": 73,
+      "role": "全库所有 *Code 字段的翻译源",
+      "dict_types": ["ORG_TYPE", "GENDER", "EDUCATION", "EMP_TYPE", "JOB_FAMILY", "JOB_LEVEL", "ASSIGN_TYPE", "ACTION_TYPE", "PRIORITY", "REQ_STATUS", "SOURCE", "STAGE", "CAND_RESULT", "PERIOD", "GRADE", "CURRENCY", "LEAVE_TYPE"],
+      "boundaries": [
+        "17 类字典共 73 行",
+        "SortNo 约 1/3 为 NULL",
+        "IsDisabled 混用 1 / 0 / NULL，无规律（照真实世界的乱）",
+        "Title 中恰有 3 条带尾空格（如 '技术' 与 '技术 '）"
+      ],
+      "traps": ["码值表本身的状态列不可靠，不能拿它当'是否启用'的唯一依据"],
+      "questions": [14]
+    },
+    {
+      "name": "HR_ORG",
+      "cn_name": "组织",
+      "rows": 40,
+      "role": "组织树，ParentID 自关联，层级至少 4 层",
+      "boundaries": [
+        "OrgLevel 分布：1 级 1 行、2 级 4 行、3 级 12 行、4 级 23 行（合计 40）",
+        "ParentID 仅顶级行为 NULL",
+        "OrgCode 为字符型且长度不一（'1' / '02' / '010' / '18' 混存）",
+        "ValidTo 恰有 2 条为已失效日期，其余为 NULL",
+        "IsActive 混用 1 / 0 / NULL",
+        "有 2 行 Remark 非空（如'组织主数据，新增组织需走审批流程'，照真实系统习惯）"
+      ],
+      "traps": [
+        "OrgCode 字符型排序：'10' 会排在 '9' 前面，必须 CAST 或用长度无关的键排序",
+        "存在已停用组织仍有任职记录（历史遗留），按组织统计时会被算进来"
+      ],
+      "questions": [3, 12, 20]
+    },
+    {
+      "name": "HR_JOB",
+      "cn_name": "岗位标准",
+      "rows": 25,
+      "role": "与组织无关的岗位定义",
+      "boundaries": [
+        "JobFamilyCode 覆盖 技术 / 职能 / 管理 / 操作 四类",
+        "JobLevelCode 覆盖 P1-P6 与 M1-M4",
+        "JobName 中至少 2 组大小写不一致：'HRBP' 与 'hrbp'、'SMT工程师' 与 'SMT 工程师'（含空格）"
+      ],
+      "traps": ["按岗位名分组统计时，大小写与空格差异会把同一个岗位拆成两行"],
+      "questions": [7, 10, 19]
+    },
+    {
+      "name": "HR_EMPLOYEE",
+      "cn_name": "员工（花名册）",
+      "rows": 200,
+      "role": "人员主数据。刻意不存'当前部门 / 当前岗位 / 在职状态'",
+      "boundaries": [
+        "在职 170 人（TermDate IS NULL），离职 30 人",
+        "HireDate 范围 2018-03 ~ 2026-06",
+        "BirthDate 恰有 3 条为 NULL",
+        "Mobile 恰有 30 条为 NULL（15%）",
+        "EducationCode 覆盖 高中及以下 / 大专 / 本科 / 硕士 四档，本科最多",
+        "EmpTypeCode 覆盖 正式 / 实习 / 外包 / 派遣 四类",
+        "IsActive 混用 1 / 0 / NULL",
+        "存在 2 名同名'张伟'，EmpNo 不同"
+      ],
+      "traps": [
+        "BirthDate 为 NULL 会污染 AVG/年龄计算，COUNT(列) 与 COUNT(*) 结果不同",
+        "同名不同人：按姓名匹配会串行，必须用工号",
+        "30 名离职员工中有 26 人的 TermDate 落在月中，其离职当月薪酬与考勤记录仍完整存在（离职当月照发薪）"
+      ],
+      "questions": [1, 2, 4, 5, 6, 11, 13, 16]
+    },
+    {
+      "name": "HR_POSITION",
+      "cn_name": "组织岗位与编制",
+      "rows": 60,
+      "role": "组织 × 岗位的落位与编制数，唯一键 (OrgID, JobCode)",
+      "boundaries": [
+        "覆盖 3 / 4 级组织，共 60 行；同一 (OrgID, JobCode) 不重复",
+        "HeadCountPlan 范围 1 ~ 8",
+        "有 1 个岗位编制 3 人、基准日实配 5 人（超编）",
+        "有 7 个岗位基准日零实配（有编制、无人）",
+        "有 2 个岗位挂在已停用组织下（历史遗留）"
+      ],
+      "traps": [
+        "HR_POSITION 与 HR_ASSIGNMENT 必须按 OrgID + JobCode 一起关联，只按 JobCode 关联会多算",
+        "编制数与实配人数不等是常态（超编 / 缺编 / 零实配），不能假定相等"
+      ],
+      "questions": [19]
+    },
+    {
+      "name": "HR_ASSIGNMENT",
+      "cn_name": "任职记录",
+      "rows": 243,
+      "role": "★ 整套模型的枢纽：人 × 组织 × 岗位 × 时间",
+      "boundaries": [
+        "42 人拥有 2 段及以上任职：30 人带一段历史任职段，另有 12 段兼岗（IsPrimary = 0）",
+        "每位在职者至少有 1 段 IsPrimary = 1 且 EndDate 为 NULL 的当前任职",
+        "ActionCode 覆盖 入职 / 转正 / 调动 / 晋升 / 离职",
+        "AssignmentTypeCode 覆盖 主职 / 兼岗 / 借调 / 代理",
+        "有 1 条任职记录指向一个已停用组织（历史遗留）"
+      ],
+      "traps": [
+        "一人多段：不加时间条件直接 JOIN 组织，人数会被放大",
+        "基准日判断必须同时满足 StartDate <= 基准日 AND (EndDate IS NULL OR EndDate >= 基准日)",
+        "兼岗（IsPrimary = 0）若一并计入，人数会虚高"
+      ],
+      "questions": [11, 12, 15, 17, 18, 19]
+    },
+    {
+      "name": "HR_SALARY",
+      "cn_name": "薪酬（按月）",
+      "rows": 1868,
+      "role": "按月薪酬事实，主键唯一键 (EmpNo, SalaryMonth)",
+      "boundaries": [
+        "覆盖 202507 ~ 202606 共 12 个月，但每月人数不等（约 150 ~ 170 人，随入职离职变化）",
+        "Deduction 约 20% 为 NULL，另有约 10% 显式写入 0",
+        "CurrencyCode 绝大多数为 CNY；海外组织 5 名员工共 60 条为 USD 或 INR",
+        "币种按人固定：同一个人不会逐月跳币种"
+      ],
+      "traps": [
+        "NULL 与 0 语义不同：NULL 表示'无此项'，0 表示'有但为零'，SUM/AVG 会把两者区别暴露出来",
+        "直接 SUM(NetPay) 会跨币种相加，得到无意义的结果（外币金额量级也不同，不能用数值大小去猜）",
+        "某月人数与在职人数不等（月初入职、月中离职者处理不同）"
+      ],
+      "questions": [7, 10, 16, 18]
+    },
+    {
+      "name": "HR_ATTENDANCE",
+      "cn_name": "考勤（按月）",
+      "rows": 1868,
+      "role": "按月考勤事实，唯一键 (EmpNo, AttMonth)",
+      "boundaries": [
+        "覆盖 202507 ~ 202606 共 12 个月，与 HR_SALARY 逐行对应",
+        "LeaveDays 约 40% 为 NULL（无请假）",
+        "OvertimeHours 约 30% 为 NULL",
+        "AbsentDays 仅约 5% 有值且大于 0",
+        "LateCount 约 15% 为 NULL"
+      ],
+      "traps": ["多个可空数值列叠加，AVG 的分母很容易算错（NULL 默认被排除）"],
+      "questions": [8]
+    },
+    {
+      "name": "HR_RECRUIT_REQ",
+      "cn_name": "招聘需求",
+      "rows": 30,
+      "role": "招聘需求主表",
+      "boundaries": [
+        "StateCode 分布：待审批 4 / 进行中 12 / 已暂停 3 / 已关闭 11",
+        "CloseDate IS NULL 共 19 条（含 1 条状态为已关闭却无 CloseDate 的脏数据）",
+        "PriorityCode 覆盖 高 / 中 / 低",
+        "HeadCount 范围 1 ~ 8"
+      ],
+      "traps": ["'进行中但 CloseDate 不为空'与'已关闭但 CloseDate 为空'各埋 1 条，用于暴露状态列与日期列不一致的口径问题"],
+      "questions": [17]
+    },
+    {
+      "name": "HR_CANDIDATE",
+      "cn_name": "候选人",
+      "rows": 120,
+      "role": "候选人明细，挂在招聘需求下",
+      "boundaries": [
+        "SourceCode 覆盖 内推 / 招聘网站 / 猎头 / 校招",
+        "StageCode 覆盖 简历筛选 / 初试 / 复试 / Offer / 入职 / 淘汰",
+        "OfferDate 与 HireDate 约 70% 为 NULL（未走到该阶段）",
+        "ExpectedSalary 有约 25% 为 NULL",
+        "有 3 个需求（REQ250001 ~ REQ250003）零候选人"
+      ],
+      "traps": ["阶段与日期不一致：有候选人 StageCode 已是'入职'但 HireDate 为空（数据未回填）"],
+      "questions": [15]
+    },
+    {
+      "name": "HR_PERFORMANCE",
+      "cn_name": "绩效",
+      "rows": 315,
+      "role": "考核结果，唯一键 (EmpNo, PeriodCode)",
+      "boundaries": [
+        "PeriodCode：2025H2 共 149 行、2026H1 共 166 行",
+        "ScoreValue 有 34 条为 NULL（未参加考核：8 名在职者从未参加 + 入职不足 90 天者），约 11%",
+        "GradeCode 严格由 ScoreValue 推导：>=95 S、>=90 A、>=80 B、>=70 C、<70 D（B 最多，S 与 D 最少）",
+        "RankInOrg 为同一考核期、同一'当期所属组织'内按分数降序的 1..N 排名，未参评者为 NULL",
+        "IsFinal 约 15% 为 0（未终评）"
+      ],
+      "traps": [
+        "ScoreValue 为 NULL 与'分数为 0'完全不同，AVG 时须先决定口径",
+        "未终评（IsFinal = 0）的记录是否参与统计，是典型的口径分歧点",
+        "RankInOrg 只在'当期所属组织'内有意义：跨组织取最大值没有意义"
+      ],
+      "questions": [9, 13]
+    }
+  ],
+
+  "questions": [
+    {"id": 1,  "topic": "SELECT 指定列 + WHERE 等值",            "tables": ["HR_EMPLOYEE"],                              "depends_on": ["HR_EMPLOYEE 中在职 170 人", "EducationCode 覆盖 4 档且本科人数最多"], "expected_stable": true},
+    {"id": 2,  "topic": "WHERE 多条件 + AND/OR 与括号优先级",     "tables": ["HR_EMPLOYEE"],                              "depends_on": ["学历与雇佣类型两个维度均有交叉分布"], "expected_stable": true},
+    {"id": 3,  "topic": "ORDER BY 多键排序（字符型数字陷阱）",     "tables": ["HR_ORG"],                                   "depends_on": ["OrgCode 为字符型且长短不一"], "expected_stable": true},
+    {"id": 4,  "topic": "BETWEEN / 日期区间",                    "tables": ["HR_EMPLOYEE"],                              "depends_on": ["HireDate 覆盖 2018-2026，区间内人数明确"], "expected_stable": true},
+    {"id": 5,  "topic": "IN / NOT IN 与 NULL 陷阱",              "tables": ["HR_EMPLOYEE"],                              "depends_on": ["EmpTypeCode 存在可空取值，使 NOT IN 语义可辨"], "expected_stable": true},
+    {"id": 6,  "topic": "COUNT(*) 与 COUNT(列) 的差异",           "tables": ["HR_EMPLOYEE"],                              "depends_on": ["BirthDate 恰有 3 条为 NULL"], "expected_stable": true},
+    {"id": 7,  "topic": "GROUP BY + SUM",                        "tables": ["HR_SALARY", "HR_JOB"],                       "depends_on": ["12 个月薪酬完整", "同岗位名存在大小写与空格差异"], "expected_stable": true},
+    {"id": 8,  "topic": "GROUP BY + HAVING",                     "tables": ["HR_ATTENDANCE"],                             "depends_on": ["多列可空，HAVING 阈值需能筛出确定人数"], "expected_stable": true},
+    {"id": 9,  "topic": "AVG + 四舍五入 + NULL 影响",             "tables": ["HR_PERFORMANCE"],                            "depends_on": ["ScoreValue 有 34 条为 NULL"], "expected_stable": true},
+    {"id": 10, "topic": "GROUP BY 多列 + 排序",                   "tables": ["HR_SALARY"],                                 "depends_on": ["同一 EmpNo 在 12 个月内出现多次，可做期间聚合"], "expected_stable": true},
+    {"id": 11, "topic": "两表 INNER JOIN（人 ↔ 任职）",            "tables": ["HR_EMPLOYEE", "HR_ASSIGNMENT"],              "depends_on": ["42 人有 2 段及以上任职"], "expected_stable": true},
+    {"id": 12, "topic": "三表 JOIN（人 ↔ 任职 ↔ 组织）",          "tables": ["HR_EMPLOYEE", "HR_ASSIGNMENT", "HR_ORG"],    "depends_on": ["组织层级至少 4 层"], "expected_stable": true},
+    {"id": 13, "topic": "LEFT JOIN 找'没有 XX 的人'",            "tables": ["HR_EMPLOYEE", "HR_PERFORMANCE"],             "depends_on": ["存在从未参加考核的在职员工"], "expected_stable": true},
+    {"id": 14, "topic": "JOIN 字典表做代码翻译",                  "tables": ["HR_EMPLOYEE", "HR_DICT"],                    "depends_on": ["EducationCode 全部能在 HR_DICT 找到对应 Title"], "expected_stable": true},
+    {"id": 15, "topic": "JOIN + 时间条件（某时点组织归属）★",      "tables": ["HR_ASSIGNMENT", "HR_ORG"],                   "depends_on": ["42 人有调动或兼岗历史，基准日前后归属不同"], "expected_stable": true},
+    {"id": 16, "topic": "子查询（IN / 标量子查询）",              "tables": ["HR_SALARY", "HR_EMPLOYEE"],                  "depends_on": ["薪酬按人聚合后可做阈值比较"], "expected_stable": true},
+    {"id": 17, "topic": "相关子查询 / EXISTS",                   "tables": ["HR_RECRUIT_REQ", "HR_CANDIDATE"],            "depends_on": ["存在有需求但零候选人的需求单（REQ250001 ~ 3）"], "expected_stable": true},
+    {"id": 18, "topic": "ROW_NUMBER() 取每组第一条",              "tables": ["HR_SALARY"],                                 "depends_on": ["同一 EmpNo 有 12 期记录，可明确取最新一期"], "expected_stable": true},
+    {"id": 19, "topic": "聚合 + JOIN 求编制 vs 实配",             "tables": ["HR_POSITION", "HR_ASSIGNMENT", "HR_JOB"],    "depends_on": ["某岗位编制 3 人、实配 5 人（超编）", "另有 7 个零实配岗位"], "expected_stable": true},
+    {"id": 20, "topic": "递归 CTE 遍历组织树",                    "tables": ["HR_ORG"],                                    "depends_on": ["组织树至少 4 层，顶级唯一"], "expected_stable": true}
+  ],
+
+  "forbidden_syntax_in_first_20": [
+    "CONVERT",
+    "PIVOT / UNPIVOT",
+    "MERGE",
+    "TOP n PERCENT",
+    "存储过程 / 触发器 / 游标"
+  ],
+
+  "note_for_engineering": "第一题到第二十题均不使用上述语法（转译层覆盖不到）。题目所需的所有'当前'判断都写成固定日期 '2026-06-30'，不得替换为 GETDATE()、CURRENT_DATE 或 date('now')。建库请用 schema.sql，灌数请用 seed.sql（SQL Server 语法），网页端转译层由工程侧负责。"
+}
