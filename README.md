@@ -242,7 +242,11 @@ judgeResult(userRows, userColumns, refRows, refColumns, options) -> verdict
    业务侧交付口径写「列名默认不比，只在差异区提示『列名与预期不同』」。
    现以主人裁定为准：**默认不比**，工程实现维持现状（`src/judge.js` 的 `namesSetEqual` / `columnIssue` 分支），
    列名与预期不同时只在结论里提示，不判错。
-   契约文档 §5.2 待业务侧（HRIS）侧同步修订。
+   契约文档 §5.2 原与该口径冲突（写「列集合必须一致」），**已由业务侧（HRIS）于 2026-10-10 书面裁定并同步修订**：
+   正本《题目 JSON 契约 v1》§5.2 与《请读我_交付说明》§三-4 表述统一为「**列数必须一致；列名不比对**」，
+   并补入《口径裁定 v1》新增裁定 6；另附《请读我_列名口径裁定_20261010》。
+   裁定边界：别名、大小写、单复数、中英文列名差异**一律不判错**；`output_hint` 里的列要求属**教学提示、不进判题**；
+   **列数不一致判不通过**。**工程侧实现无需改动**（与该裁定一致）。
    若日后改判「必须比」，改动点只有 `src/judge.js`，验证用例是 `test/judge.test.mjs` 的
    `different_column_names_same_position_passes_with_column_issue`。
 2. `expected.row_count` 的固化范围：目前 20 题都有值，是不是所有新题都必须回填？
