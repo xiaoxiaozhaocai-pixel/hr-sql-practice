@@ -393,5 +393,5 @@ pre {
     z-index: 60; border-radius: 0; border-right: 1px solid var(--line); max-height: none;
   }
   .rail-btn { display: inline-block; }
-  .detail { min-width: 640px; }
+  .detail { min-width: 0; } /* v9.1: 原 min-width:640px 令 375 宽手机横向溢出约 273px */
 }
