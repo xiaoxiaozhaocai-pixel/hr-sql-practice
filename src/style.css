@@ -363,6 +363,25 @@ pre {
   }
 }
 
+/* ---------------------------- 今日小组 / 段末总结 / 下一步 ---------------------------- */
+.today-card { margin-bottom: 12px; }
+.today-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.today-summary { margin: 6px 0 8px; font-size: 13px; }
+.today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.today-list li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+}
+.today-list li.on { border-color: var(--accent); }
+.today-list li.done { opacity: 0.72; }
+.today-list .t-no { font-weight: 700; min-width: 46px; }
+.today-list .t-title { flex: 1 1 auto; }
+.today-list .t-status { font-size: 12px; color: var(--muted); }
+.today-list li.is-review .t-status { color: var(--accent); }
+.next-action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.section-summary, .today-wrap { margin-top: 12px; }
+.summary-points { margin: 6px 0 8px; padding-left: 20px; }
+
 /* ---------------------------- 窄屏：左栏收起，主列优先保宽 ---------------------------- */
 @media (max-width: 968px) {
   .layout { display: block; padding: 8px; }

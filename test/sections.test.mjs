@@ -124,3 +124,36 @@ test('render_layer_wires_section_tags_and_syntax_cards', () => {
   assert.doesNotMatch(collapsed, /id="q-tags"/);
   assert.doesNotMatch(collapsed, /id="q-syntax"/);
 });
+
+/* ---------------------------- 今日小组 / 段末结算渲染骨架（T19 / B2） ---------------------------- */
+
+test('render_layer_wires_today_group_and_section_summary', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
+  assert.match(app, /renderTodayGroup/, '渲染层必须渲染今日小组');
+  assert.match(app, /renderSectionSummary/, '渲染层必须有独立段末总结');
+  assert.match(app, /sectionTransition/, '渲染层必须调用段末结算纯函数');
+  assert.match(app, /L\.replacePlanItem/, '换题只走 replacePlanItem');
+  assert.match(html, /id="today-card"/);
+  assert.match(html, /id="section-summary"/);
+  assert.match(html, /id="next-action"/);
+  assert.match(html, /id="btn-next-primary"/);
+  assert.match(html, /id="btn-reinit"/, '数据库初始化失败要提供重新初始化');
+});
+
+test('attempt_caption_uses_local_attempts_not_global_hearts', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  assert.match(app, /本题独立尝试剩余/, '尝试次数用 §4.4 的本题口径');
+  assert.doesNotMatch(app, /红心|等待回血|扣血|用尽/, '界面文案不得出现全局资源焦虑表达');
+  assert.doesNotMatch(app, /window\.confirm|window\.alert|window\.prompt/, '不得使用浏览器确认弹窗');
+});
+
+test('nav_keeps_full_denominator_and_marks_section_position', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  /* 段进度分母恒为该段全题数；筛选只过滤题行，不参与分母 */
+  assert.match(app, /passedInSection\(sec\)\s*\+\s*'\/'\s*\+\s*sec\.questions\.length/);
+  assert.match(app, /本段第 /, '搜索结果必须标段内位置');
+  assert.match(app, /清空筛选/, '筛选无结果必须有清空入口');
+  assert.match(app, /已定位今日任务，目录筛选已清空/);
+  assert.match(app, /待复查/, '已完成与待复查要能同时显示');
+});

@@ -433,3 +433,93 @@ test('replacePlanItem_is_idempotent_for_the_same_question', () => {
   assert.equal(r2.replaced, false, '第二次不再替换');
   assert.deepEqual(snapshot(s), after, '第二次调用 state 深度相等');
 });
+
+/* ---------------------------- 段末结算（T19 / B2） ---------------------------- */
+
+function passWholeSection(state, sec, day) {
+  sec.questions.forEach((q) => {
+    state.passed[q.id] = true;
+    state.learning.completions[q.id] = { firstPassDay: day, completionType: 'independent', lastPassDay: day };
+  });
+}
+
+test('sectionTransition_reports_completion_only_when_the_whole_section_passed', () => {
+  const sec = SECTIONS[0];
+  const last = sec.questions[sec.questions.length - 1].id;
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  passWholeSection(s, { section: sec.section, questions: sec.questions.slice(0, -1) }, DAY);
+
+  const mid = L.sectionTransition(s, SECTIONS, sec.questions[0].id);
+  assert.equal(mid.completed, false, '最后一题未过时不算整段完成');
+  assert.equal(mid.passed, sec.questions.length - 1);
+  assert.equal(mid.section, sec.section);
+
+  s.passed[last] = true;
+  s.learning.completions[last] = { firstPassDay: DAY, completionType: 'independent', lastPassDay: DAY };
+  const done = L.sectionTransition(s, SECTIONS, last);
+  assert.equal(done.completed, true, '全段 passed 才算完成');
+  assert.equal(done.passed, done.total);
+  assert.equal(done.isLastSection, false, '第 1 段不是末段');
+  assert.equal(typeof done.nextSection, 'number', '存在下一段');
+  assert.ok(done.nextFirstQuestion, '下一段要给出第一题入口');
+  assert.ok(done.keyPoints.length > 0 && done.keyPoints.length <= 3, '主要考点最多三个');
+});
+
+test('sectionTransition_marks_first_shown_once_and_never_rewards_xp', () => {
+  const sec = SECTIONS[0];
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  passWholeSection(s, sec, DAY);
+  const xpBefore = s.xp;
+
+  const first = L.sectionTransition(s, SECTIONS, sec.questions[0].id);
+  assert.equal(first.firstShown, true, '首次展示');
+  assert.equal(L.markSectionSummarySeen(s, sec.section), true, '首次标记成功');
+  assert.equal(L.markSectionSummarySeen(s, sec.section), false, '重复标记返回 false');
+
+  const again = L.sectionTransition(s, SECTIONS, sec.questions[0].id);
+  assert.equal(again.completed, true, '旧用户仍可回看总结');
+  assert.equal(again.firstShown, false, '回看不再首次庆祝');
+  assert.equal(s.xp, xpBefore, '段末结算与标记都不重发 XP');
+});
+
+test('sectionTransition_splits_unseen_answer_and_guided_completions', () => {
+  const sec = SECTIONS[0];
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  passWholeSection(s, sec, DAY);
+  s.learning.completions[sec.questions[0].id].completionType = 'guided';
+  s.learning.review[sec.questions[1].id] = { status: 'due', dueDay: DAY, lastErrorKind: null, note: null, lastIndependentPassDay: null };
+  s.learning.review[sec.questions[2].id] = { status: 'needsFix', dueDay: null, lastErrorKind: null, note: null, lastIndependentPassDay: null };
+
+  const t = L.sectionTransition(s, SECTIONS, sec.questions[0].id);
+  assert.equal(t.guided, 1, '跟练完成单独计数');
+  assert.equal(t.unseenAnswer, sec.questions.length - 1, '其余为未看完整答案完成');
+  assert.equal(t.due, 1);
+  assert.deepEqual(t.dueIds, [sec.questions[1].id]);
+  assert.equal(t.needsFix, 1, '待修正与待复查并列展示');
+});
+
+test('sectionTransition_last_section_carries_course_totals_and_has_no_next', () => {
+  const sec = SECTIONS[SECTIONS.length - 1];
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  passWholeSection(s, sec, DAY);
+
+  const t = L.sectionTransition(s, SECTIONS, sec.questions[0].id);
+  assert.equal(t.isLastSection, true);
+  assert.equal(t.nextSection, null);
+  assert.equal(t.nextFirstQuestion, null, '不寻找不存在的下一题');
+  assert.equal(t.course.total, ORDER.length, '末段带全库题数');
+  assert.equal(t.course.passed, sec.questions.length, '只统计已通过的题');
+  assert.equal(t.course.dueIds.length, t.course.due);
+});
+
+test('sectionTransition_returns_null_for_unknown_question_or_empty_sections', () => {
+  const s = L.freshState();
+  assert.equal(L.sectionTransition(s, SECTIONS, 'q999'), null);
+  assert.equal(L.sectionTransition(s, SECTIONS, null), null);
+  assert.equal(L.sectionTransition(s, [], 'q001'), null);
+  assert.equal(L.markSectionSummarySeen(s, null), false, '空段号不标记');
+});

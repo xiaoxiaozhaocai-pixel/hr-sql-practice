@@ -929,6 +929,100 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 段末结算（§5.2 / §5.3）—— 新增纯函数，不改动既有导出
+   * ------------------------------------------------------------------ */
+
+  /* 三个主要考点：按段内题序取前 limit 个不重复的 knowledge_point。 */
+  function sectionKeyPoints(sec, limit) {
+    var out = [];
+    var seen = {};
+    ((sec && sec.questions) || []).forEach(function (q) {
+      var kp = (q && typeof q.knowledge_point === 'string') ? q.knowledge_point.trim() : '';
+      if (!kp || seen[kp]) return;
+      seen[kp] = true;
+      out.push(kp);
+    });
+    return out.slice(0, limit || 3);
+  }
+
+  /**
+   * 段末结算描述（纯函数：不写 state，不重发 XP）。
+   * qid = 刚通过的题；也可用 opts.section 直接指定段号。
+   * completed=true 仅当该段全题 passed；firstShown=false 表示旧用户回看，不再「首次庆祝」。
+   * 第 6 段（或末段）附带全库统计 course:{total,passed,due}，不寻找不存在的题号。
+   * @returns {Object|null} qid / section 不落在任何段时返回 null
+   */
+  function sectionTransition(state, sections, qid, opts) {
+    ensureLearning(state);
+    opts = opts || {};
+    var list = sections || [];
+    var idx = courseIndex(list);
+    var target = null;
+    var sid = null;
+    if (qid && idx.byId[qid]) sid = idx.byId[qid].section;
+    else if (opts.section !== undefined && opts.section !== null) sid = opts.section;
+    list.forEach(function (s) { if (s.section === sid) target = s; });
+    if (!target) return null;
+
+    var total = (target.questions || []).length;
+    var passed = 0, unseenAnswer = 0, guided = 0, due = 0, needsFix = 0;
+    var dueIds = [];
+    (target.questions || []).forEach(function (q) {
+      if (!state.passed[q.id]) return;
+      passed += 1;
+      var c = state.learning.completions[q.id];
+      if (c && c.completionType === 'guided') guided += 1;
+      else if (c && c.completionType === 'independent') unseenAnswer += 1;
+      var rv = state.learning.review[q.id];
+      if (rv && rv.status === 'due') { due += 1; dueIds.push(q.id); }
+      else if (rv && rv.status === 'needsFix') needsFix += 1;
+    });
+
+    var pos = null;
+    for (var i = 0; i < list.length; i++) { if (list[i].section === target.section) { pos = i; break; } }
+    var next = (pos !== null && pos + 1 < list.length) ? list[pos + 1] : null;
+    var seenMap = state.learning.sectionSummarySeen || {};
+
+    var courseTotal = 0, coursePassed = 0, courseDue = 0;
+    var courseDueIds = [];
+    idx.flat.forEach(function (x) {
+      courseTotal += 1;
+      if (state.passed[x.id]) coursePassed += 1;
+      var rv = state.learning.review[x.id];
+      if (rv && rv.status === 'due') { courseDue += 1; courseDueIds.push(x.id); }
+    });
+
+    return {
+      section: target.section,
+      title: target.title,
+      total: total,
+      passed: passed,
+      completed: total > 0 && passed === total,
+      unseenAnswer: unseenAnswer,
+      guided: guided,
+      due: due,
+      dueIds: dueIds,
+      needsFix: needsFix,
+      keyPoints: sectionKeyPoints(target),
+      firstShown: seenMap[target.section] !== true,
+      isLastSection: next === null,
+      nextSection: next ? next.section : null,
+      nextTitle: next ? next.title : null,
+      nextFirstQuestion: (next && next.questions && next.questions.length) ? next.questions[0].id : null,
+      course: { total: courseTotal, passed: coursePassed, due: courseDue, dueIds: courseDueIds }
+    };
+  }
+
+  /* 标记段末总结已展示；返回 true 表示这是首次（只庆祝一次）。 */
+  function markSectionSummarySeen(state, section) {
+    ensureLearning(state);
+    if (section === null || section === undefined) return false;
+    if (state.learning.sectionSummarySeen[section] === true) return false;
+    state.learning.sectionSummarySeen[section] = true;
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ *
    * 兼容包装（旧签名 / 旧返回值保持可用，内部走同一套新规则）
    * ------------------------------------------------------------------ */
 
@@ -1068,6 +1162,9 @@
     recordLearningAttempt: recordLearningAttempt,
     creditLearningEvent: creditLearningEvent,
     sectionProgress: sectionProgress,
+    sectionTransition: sectionTransition,
+    markSectionSummarySeen: markSectionSummarySeen,
+    sectionKeyPoints: sectionKeyPoints,
     recordWrong: recordWrong,
     recordPass: recordPass,
     goalMet: goalMet,

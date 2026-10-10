@@ -47,6 +47,7 @@
 <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="load-banner" class="banner" hidden=""></div>
+<button id="btn-reinit" type="button" class="btn ghost sm" hidden="">重新初始化数据库</button>
 <div id="selfcheck-banner" class="banner banner-error" hidden=""></div>
 
 <main class="layout">
@@ -76,6 +77,17 @@
   </aside>
 
   <section class="detail">
+    <section class="card today-card" id="today-card" aria-label="今日小组">
+      <div class="today-head">
+        <b>今日小组</b>
+        <span id="today-count" class="muted"></span>
+      </div>
+      <p id="today-summary" class="today-summary"></p>
+      <p id="today-note" class="muted" hidden=""></p>
+      <div id="today-adjust" class="card-note is-warn" hidden=""></div>
+      <ul id="today-list" class="today-list"></ul>
+    </section>
+
     <div id="detail-empty" class="empty">从左侧选一关开始闯关。</div>
 
     <div id="detail-body" hidden="">
@@ -141,6 +153,11 @@
         </div>
 
         <div id="verdict" class="card-note" role="status" aria-live="polite" aria-atomic="true" hidden=""></div>
+
+        <div id="next-action" class="next-action" hidden="">
+          <button id="btn-next-primary" type="button" class="btn primary"></button>
+          <button id="btn-next-secondary" type="button" class="btn ghost" hidden=""></button>
+        </div>
       </section>
 
       <section class="card" id="result-block" hidden="">
@@ -168,6 +185,19 @@
         <ul id="q-pitfalls"></ul>
         <h4>本题方言提示</h4>
         <p id="q-dialect"></p>
+      </section>
+
+      <section class="card section-summary" id="section-summary" hidden="" aria-label="段末总结">
+        <h3 id="section-summary-title"></h3>
+        <p id="section-summary-body"></p>
+        <h4>本段主要考点</h4>
+        <ul id="section-summary-points" class="summary-points"></ul>
+        <div id="section-summary-due" class="muted"></div>
+      </section>
+
+      <section class="card today-wrap" id="today-wrap" hidden="" aria-label="今日收束">
+        <h3 id="today-wrap-title"></h3>
+        <p id="today-wrap-body"></p>
       </section>
     </div>
   </section>
