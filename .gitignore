@@ -3,3 +3,5 @@ node_modules/
 *.log
 _verify/
 .trash/
+_publish/
+dist/.coze
