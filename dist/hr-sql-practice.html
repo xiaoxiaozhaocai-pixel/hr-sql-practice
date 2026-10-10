@@ -370,6 +370,25 @@ pre {
   }
 }
 
+/* ---------------------------- 今日小组 / 段末总结 / 下一步 ---------------------------- */
+.today-card { margin-bottom: 12px; }
+.today-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.today-summary { margin: 6px 0 8px; font-size: 13px; }
+.today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.today-list li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+}
+.today-list li.on { border-color: var(--accent); }
+.today-list li.done { opacity: 0.72; }
+.today-list .t-no { font-weight: 700; min-width: 46px; }
+.today-list .t-title { flex: 1 1 auto; }
+.today-list .t-status { font-size: 12px; color: var(--muted); }
+.today-list li.is-review .t-status { color: var(--accent); }
+.next-action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.section-summary, .today-wrap { margin-top: 12px; }
+.summary-points { margin: 6px 0 8px; padding-left: 20px; }
+
 /* ---------------------------- 窄屏：左栏收起，主列优先保宽 ---------------------------- */
 @media (max-width: 968px) {
   .layout { display: block; padding: 8px; }
@@ -423,6 +442,7 @@ pre {
 <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="load-banner" class="banner" hidden=""></div>
+<button id="btn-reinit" type="button" class="btn ghost sm" hidden="">重新初始化数据库</button>
 <div id="selfcheck-banner" class="banner banner-error" hidden=""></div>
 
 <main class="layout">
@@ -452,6 +472,17 @@ pre {
   </aside>
 
   <section class="detail">
+    <section class="card today-card" id="today-card" aria-label="今日小组">
+      <div class="today-head">
+        <b>今日小组</b>
+        <span id="today-count" class="muted"></span>
+      </div>
+      <p id="today-summary" class="today-summary"></p>
+      <p id="today-note" class="muted" hidden=""></p>
+      <div id="today-adjust" class="card-note is-warn" hidden=""></div>
+      <ul id="today-list" class="today-list"></ul>
+    </section>
+
     <div id="detail-empty" class="empty">从左侧选一关开始闯关。</div>
 
     <div id="detail-body" hidden="">
@@ -517,6 +548,11 @@ pre {
         </div>
 
         <div id="verdict" class="card-note" role="status" aria-live="polite" aria-atomic="true" hidden=""></div>
+
+        <div id="next-action" class="next-action" hidden="">
+          <button id="btn-next-primary" type="button" class="btn primary"></button>
+          <button id="btn-next-secondary" type="button" class="btn ghost" hidden=""></button>
+        </div>
       </section>
 
       <section class="card" id="result-block" hidden="">
@@ -544,6 +580,19 @@ pre {
         <ul id="q-pitfalls"></ul>
         <h4>本题方言提示</h4>
         <p id="q-dialect"></p>
+      </section>
+
+      <section class="card section-summary" id="section-summary" hidden="" aria-label="段末总结">
+        <h3 id="section-summary-title"></h3>
+        <p id="section-summary-body"></p>
+        <h4>本段主要考点</h4>
+        <ul id="section-summary-points" class="summary-points"></ul>
+        <div id="section-summary-due" class="muted"></div>
+      </section>
+
+      <section class="card today-wrap" id="today-wrap" hidden="" aria-label="今日收束">
+        <h3 id="today-wrap-title"></h3>
+        <p id="today-wrap-body"></p>
       </section>
     </div>
   </section>
@@ -2044,6 +2093,100 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   }
 
   /* ------------------------------------------------------------------ *
+   * 段末结算（§5.2 / §5.3）—— 新增纯函数，不改动既有导出
+   * ------------------------------------------------------------------ */
+
+  /* 三个主要考点：按段内题序取前 limit 个不重复的 knowledge_point。 */
+  function sectionKeyPoints(sec, limit) {
+    var out = [];
+    var seen = {};
+    ((sec && sec.questions) || []).forEach(function (q) {
+      var kp = (q && typeof q.knowledge_point === 'string') ? q.knowledge_point.trim() : '';
+      if (!kp || seen[kp]) return;
+      seen[kp] = true;
+      out.push(kp);
+    });
+    return out.slice(0, limit || 3);
+  }
+
+  /**
+   * 段末结算描述（纯函数：不写 state，不重发 XP）。
+   * qid = 刚通过的题；也可用 opts.section 直接指定段号。
+   * completed=true 仅当该段全题 passed；firstShown=false 表示旧用户回看，不再「首次庆祝」。
+   * 第 6 段（或末段）附带全库统计 course:{total,passed,due}，不寻找不存在的题号。
+   * @returns {Object|null} qid / section 不落在任何段时返回 null
+   */
+  function sectionTransition(state, sections, qid, opts) {
+    ensureLearning(state);
+    opts = opts || {};
+    var list = sections || [];
+    var idx = courseIndex(list);
+    var target = null;
+    var sid = null;
+    if (qid && idx.byId[qid]) sid = idx.byId[qid].section;
+    else if (opts.section !== undefined && opts.section !== null) sid = opts.section;
+    list.forEach(function (s) { if (s.section === sid) target = s; });
+    if (!target) return null;
+
+    var total = (target.questions || []).length;
+    var passed = 0, unseenAnswer = 0, guided = 0, due = 0, needsFix = 0;
+    var dueIds = [];
+    (target.questions || []).forEach(function (q) {
+      if (!state.passed[q.id]) return;
+      passed += 1;
+      var c = state.learning.completions[q.id];
+      if (c && c.completionType === 'guided') guided += 1;
+      else if (c && c.completionType === 'independent') unseenAnswer += 1;
+      var rv = state.learning.review[q.id];
+      if (rv && rv.status === 'due') { due += 1; dueIds.push(q.id); }
+      else if (rv && rv.status === 'needsFix') needsFix += 1;
+    });
+
+    var pos = null;
+    for (var i = 0; i < list.length; i++) { if (list[i].section === target.section) { pos = i; break; } }
+    var next = (pos !== null && pos + 1 < list.length) ? list[pos + 1] : null;
+    var seenMap = state.learning.sectionSummarySeen || {};
+
+    var courseTotal = 0, coursePassed = 0, courseDue = 0;
+    var courseDueIds = [];
+    idx.flat.forEach(function (x) {
+      courseTotal += 1;
+      if (state.passed[x.id]) coursePassed += 1;
+      var rv = state.learning.review[x.id];
+      if (rv && rv.status === 'due') { courseDue += 1; courseDueIds.push(x.id); }
+    });
+
+    return {
+      section: target.section,
+      title: target.title,
+      total: total,
+      passed: passed,
+      completed: total > 0 && passed === total,
+      unseenAnswer: unseenAnswer,
+      guided: guided,
+      due: due,
+      dueIds: dueIds,
+      needsFix: needsFix,
+      keyPoints: sectionKeyPoints(target),
+      firstShown: seenMap[target.section] !== true,
+      isLastSection: next === null,
+      nextSection: next ? next.section : null,
+      nextTitle: next ? next.title : null,
+      nextFirstQuestion: (next && next.questions && next.questions.length) ? next.questions[0].id : null,
+      course: { total: courseTotal, passed: coursePassed, due: courseDue, dueIds: courseDueIds }
+    };
+  }
+
+  /* 标记段末总结已展示；返回 true 表示这是首次（只庆祝一次）。 */
+  function markSectionSummarySeen(state, section) {
+    ensureLearning(state);
+    if (section === null || section === undefined) return false;
+    if (state.learning.sectionSummarySeen[section] === true) return false;
+    state.learning.sectionSummarySeen[section] = true;
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ *
    * 兼容包装（旧签名 / 旧返回值保持可用，内部走同一套新规则）
    * ------------------------------------------------------------------ */
 
@@ -2183,6 +2326,9 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     recordLearningAttempt: recordLearningAttempt,
     creditLearningEvent: creditLearningEvent,
     sectionProgress: sectionProgress,
+    sectionTransition: sectionTransition,
+    markSectionSummarySeen: markSectionSummarySeen,
+    sectionKeyPoints: sectionKeyPoints,
     recordWrong: recordWrong,
     recordPass: recordPass,
     goalMet: goalMet,
@@ -2705,6 +2851,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   });
 
   /* localStorage 不可用（隐私模式 / file:// 策略）时退化成内存 stub，页面照常可玩。 */
+  var STORAGE_OK = true;
   function safeStorage() {
     try {
       var t = '__dbquest_probe__';
@@ -2712,6 +2859,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       window.localStorage.removeItem(t);
       return window.localStorage;
     } catch (e) {
+      STORAGE_OK = false;
       var mem = {};
       return {
         getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
@@ -2731,6 +2879,9 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   var refCache = {};          // id -> 参考 SQL 的实跑结果（含是否与 expected.row_count 对账成功）
   var currentId = null;
   var judging = false;
+  var dailyPlan = null;          // buildDailyPlan 的当日结果（建立后固定，换题只走 replacePlanItem）
+  var pendingSummary = null;     // 最近一次段末结算描述，供「查看下一段」等次动作复用
+  var lastCombined = null;       // 段末 + 今日目标合并结算只弹一次
 
   var openPanel = null;       // 'drawer' | 'rail' | null
   var lastRun = null;         // { columns, rows }：最近一次「运行」的结果，供结果区 tab 切换
@@ -2814,6 +2965,279 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return null;
   }
 
+  /* ------------------------------ 今日小组（§4.1 / §4.2 / §5.3） ------------------------------ */
+
+  function sectionIndexOf(sec, id) {
+    if (!sec) return 0;
+    for (var i = 0; i < sec.questions.length; i++) if (sec.questions[i].id === id) return i + 1;
+    return 0;
+  }
+
+  /* 题级状态：同时保留「已完成」与「待复查」，不互相遮盖（§4.2）。 */
+  function planItemStatus(id) {
+    var d = state.learning.daily;
+    var rv = state.learning.review[id];
+    var reviewTag = (rv && rv.status === 'due') ? '待复查' : ((rv && rv.status === 'needsFix') ? '待修正' : null);
+    if (d.creditedIds.indexOf(id) >= 0) return { label: '已完成', review: reviewTag };
+    if (reviewTag) return { label: reviewTag, review: reviewTag };
+    if (state.passed[id]) return { label: '已完成', review: null };
+    var a = state.learning.attempts[id];
+    if (a && a.active) return { label: '进行中', review: null };
+    return { label: '未开始', review: null };
+  }
+
+  function planIdsNow() {
+    if (dailyPlan && dailyPlan.planIds && dailyPlan.planIds.length) return dailyPlan.planIds;
+    return (state.learning.daily.planIds || []);
+  }
+
+  /* 今日小组里下一项「尚未计入今日成果」的题；没有计划项时退回 section→seq 的下一未完成题。 */
+  function nextPlanItem() {
+    var d = state.learning.daily;
+    var ids = planIdsNow();
+    for (var i = 0; i < ids.length; i++) {
+      if (d.creditedIds.indexOf(ids[i]) === -1 && QUESTION_BY_ID[ids[i]]) return ids[i];
+    }
+    var nq = L.nextQuestion(state, SECTIONS);
+    return nq ? nq.id : null;
+  }
+
+  /* 题库待复核 / 不可用题：无参考 SQL，或参考 SQL 实跑失败 / 与 expected 对不上。 */
+  function unavailableIds() {
+    var out = [];
+    QUESTIONS.forEach(function (q) {
+      if (!q.reference_sql && !q.reference_sql_sqlite) { out.push(q.id); return; }
+      var r = refCache[q.id];
+      if (r && (!r.ok || r.mismatch)) out.push(q.id);
+    });
+    return out;
+  }
+
+  /* 跳转前若被筛选隐藏：清空筛选并告知（§4.2）；筛选不改变课程完成度的推断。 */
+  function jumpToQuestion(id) {
+    var q = QUESTION_BY_ID[id];
+    if (!q) return;
+    if (!questionMatches(q)) {
+      clearFilters();
+      announce('已定位今日任务，目录筛选已清空。');
+    }
+    selectLevel(id, false);
+  }
+
+  function continueToNext() {
+    var id = nextPlanItem();
+    if (id) jumpToQuestion(id);
+  }
+
+  function gotoNextSection() {
+    if (pendingSummary && pendingSummary.nextFirstQuestion) jumpToQuestion(pendingSummary.nextFirstQuestion);
+  }
+
+  function renderTodayGroup() {
+    var list = $('today-list');
+    if (!list) return;
+    list.textContent = '';
+    var d = state.learning.daily;
+    var ids = planIdsNow();
+    var doneN = 0, dueN = 0, freshN = 0, fixN = 0;
+
+    /* 今日摘要用文字表达进度，不把今日目标挪回顶栏。 */
+    var summary = $('today-summary');
+    var count = $('today-count');
+
+    ids.forEach(function (id) {
+      if (d.creditedIds.indexOf(id) >= 0) { doneN += 1; return; }
+      var rv = state.learning.review[id];
+      if (rv && rv.status === 'due') dueN += 1;
+      else if (rv && rv.status === 'needsFix') fixN += 1;
+      else if (!state.passed[id]) freshN += 1;
+    });
+
+    if (count) count.textContent = ids.length ? doneN + '/' + ids.length + ' 已完成' : '今天没有安排';
+    if (summary) {
+      if (!ids.length) summary.textContent = '今天没有安排；可以从左侧任选一段开始。';
+      else {
+        var parts = [];
+        if (dueN) parts.push('复查 ' + dueN + ' 题');
+        if (fixN) parts.push('修正 ' + fixN + ' 题');
+        if (freshN) parts.push('再推进 ' + freshN + ' 题');
+        summary.textContent = '今天练 ' + ids.length + ' 项' + (parts.length ? '：' + parts.join('，') + '。' : '，均已完成。');
+      }
+    }
+
+    var note = $('today-note');
+    if (note) {
+      var lines = [];
+      if (!STORAGE_OK) lines.push('本次进度仅在当前页面保留。');
+      if (state.learning.persistence === 'memoryOnly') lines.push('本次进度尚未保存到浏览器（刷新可能丢失）。');
+      note.textContent = lines.join(' ');
+      show(note, lines.length > 0);
+    }
+    var adj = $('today-adjust');
+    if (adj) {
+      if (dailyPlan && dailyPlan.adjusted && dailyPlan.adjusted.reason) {
+        adj.textContent = dailyPlan.adjusted.reason;
+        show(adj, true);
+      } else { adj.textContent = ''; show(adj, false); }
+    }
+
+    var primaryId = nextPlanItem();
+    var primaryIsInPlan = primaryId && ids.indexOf(primaryId) >= 0;
+
+    ids.forEach(function (id) {
+      var q = QUESTION_BY_ID[id];
+      if (!q) return;
+      var st = planItemStatus(id);
+      var sec = SECTION_OF[id];
+      var li = el('li', null, (id === currentId ? 'on' : '') + (st.label === '已完成' ? ' done' : '') +
+        (st.review === '待复查' ? ' is-review' : ''));
+
+      var no = el('span', '第 ' + (sec ? sec.section : '?') + ' 段 · 第 ' + sectionIndexOf(sec, id) + ' 题', 't-no');
+      li.appendChild(no);
+      var title = el('button', q.title || q.id, 'link-btn t-title');
+      title.type = 'button';
+      title.addEventListener('click', function () { jumpToQuestion(id); });
+      li.appendChild(title);
+      li.appendChild(el('span', st.label + (st.review && st.label !== st.review ? ' · ' + st.review : ''), 't-status'));
+
+      /* 未完成项才提供「替换这一项」；已完成项不显示该入口（T17 唯一换题通道）。 */
+      if (st.label !== '已完成') {
+        var rep = el('button', '替换这一项', 'link-btn');
+        rep.type = 'button';
+        rep.addEventListener('click', function () { doReplace(id); });
+        li.appendChild(rep);
+      }
+      if (primaryIsInPlan && id === primaryId && st.label !== '已完成') {
+        var go = el('button', '开始这一项', 'btn primary sm');
+        go.type = 'button';
+        go.addEventListener('click', function () { jumpToQuestion(id); });
+        li.appendChild(go);
+      }
+      list.appendChild(li);
+    });
+
+    if (!ids.length) list.appendChild(el('li', '今天没有安排，可以从左侧任选一段开始。', 'muted'));
+  }
+
+  /* 换题：只走 replacePlanItem；换不了时按 reason 给可读说明，不宣告达标。 */
+  function doReplace(qid) {
+    if (!L.replacePlanItem) return;
+    var res = L.replacePlanItem(state, qid, { sections: SECTIONS, unavailableIds: unavailableIds(), today: L.todayStamp() });
+    saveProgress();
+    if (res.replaced) {
+      dailyPlan = dailyPlan ? { day: dailyPlan.day, goal: dailyPlan.goal, planIds: state.learning.daily.planIds.slice(), reason: 'fixed', adjusted: dailyPlan.adjusted } : dailyPlan;
+      announce('已把这一项替换为 ' + res.toId + '。');
+      renderTodayGroup();
+      return;
+    }
+    var msg = res.reason === 'already-credited' ? '这一项今天已经完成了，不需要替换。'
+      : res.reason === 'no-candidate' ? '没有别的可换的题了；可以先学下一段，或稍后再来。'
+      : '这一项不在今天的计划里。';
+    var adj = $('today-adjust');
+    if (adj) { adj.textContent = msg; show(adj, true); }
+    announce(msg);
+  }
+
+  /* 下一步：按 §5.3 优先级只显示一个主动作。 */
+  function chooseNextAction(info) {
+    info = info || {};
+    if (info.sectionCompleted && info.goalMet) {
+      return { primary: { label: '今天先到这里', run: function () { showTodayWrap(false); } }, secondary: { label: '查看下一段', run: gotoNextSection } };
+    }
+    if (info.sectionCompleted) {
+      return { primary: { label: '查看下一段任务', run: gotoNextSection }, secondary: null };
+    }
+    if (info.goalMet) {
+      return { primary: { label: '今天先到这里', run: function () { showTodayWrap(false); } }, secondary: { label: '继续练', run: continueToNext } };
+    }
+    return { primary: { label: '继续今天这一组的下一项', run: continueToNext }, secondary: null };
+  }
+
+  function renderNextAction(info) {
+    var box = $('next-action');
+    if (!box) return;
+    var plan = chooseNextAction(info);
+    var p = $('btn-next-primary');
+    var s = $('btn-next-secondary');
+    box.hidden = false;
+    if (p) { p.textContent = plan.primary.label; p.onclick = plan.primary.run; }
+    if (s) {
+      if (plan.secondary) { s.textContent = plan.secondary.label; s.hidden = false; s.onclick = plan.secondary.run; }
+      else { s.hidden = true; s.onclick = null; s.textContent = ''; }
+    }
+  }
+
+  /* 段末结算：独立卡片；旧用户回看只展示、不重发 XP。combined=与今日目标合并成一张结算。 */
+  function renderSectionSummary(trans, combined) {
+    var box = $('section-summary');
+    if (!box) return;
+    if (!trans || !trans.completed) { pendingSummary = null; show(box, false); return; }
+    pendingSummary = trans;
+    $('section-summary-title').textContent = combined
+      ? '第 ' + trans.section + ' 段完成 + 今日目标达成'
+      : '第 ' + trans.section + ' 段 ' + trans.total + ' 题已完成';
+    var body = '完成 ' + trans.passed + '/' + trans.total +
+      '；未看完整答案完成 ' + trans.unseenAnswer + ' 题' +
+      '；跟练完成 ' + trans.guided + ' 题' +
+      '；待复查 ' + trans.due + ' 题。';
+    if (trans.isLastSection) {
+      body = '全库首次完成 ' + trans.course.passed + '/' + trans.course.total + ' 题，待复查 ' + trans.course.due + ' 题。' +
+        '本段完成 ' + trans.passed + '/' + trans.total + '；未看完整答案完成 ' + trans.unseenAnswer +
+        ' 题；跟练完成 ' + trans.guided + ' 题。没有下一段了，可以进入复习计划。';
+    } else if (trans.nextTitle) {
+      body += ' 下一段开始练' + trans.nextTitle + '。';
+    }
+    $('section-summary-body').textContent = body;
+
+    var ul = $('section-summary-points');
+    ul.textContent = '';
+    trans.keyPoints.forEach(function (p) { ul.appendChild(el('li', p)); });
+    if (!trans.keyPoints.length) ul.appendChild(el('li', '题库未登记主要考点。'));
+
+    var due = $('section-summary-due');
+    if (trans.isLastSection) {
+      due.textContent = trans.course.due
+        ? '待复查清单（' + trans.course.due + ' 题）：' + trans.course.dueIds.join('、')
+        : '当前没有待复查的题。';
+    } else {
+      due.textContent = trans.due ? '本段待复查 ' + trans.due + ' 题：' + trans.dueIds.join('、') : '本段当前没有待复查的题。';
+    }
+    /* 合并结算：今日小结折进同一张卡，不连弹两次（§5.3 第 1 条）。 */
+    if (combined) due.textContent += ' ' + todayWrapText();
+    show(box, true);
+    if (trans.firstShown) L.markSectionSummarySeen(state, trans.section);
+  }
+
+  /* 今日收束：完成目标后非阻塞小结；只庆祝一次。 */
+  function todayWrapTitle() {
+    return L.goalMet(state) ? '今天目标已完成' : '今天到这里';
+  }
+
+  function todayWrapText() {
+    var d = state.learning.daily;
+    var today = d.day;
+    var fresh = 0, review = 0;
+    d.creditedIds.forEach(function (id) {
+      var c = state.learning.completions[id];
+      if (c && c.firstPassDay === today) fresh += 1;
+      else review += 1;
+    });
+    var sp = L.sectionProgress(state, SECTIONS);
+    var needs = sp.sections.reduce(function (n, s) { return n + s.needsFix; }, 0);
+    return '今天完成 ' + fresh + ' 道新题、复查 ' + review +
+      ' 题；待修正 ' + needs + ' 题。下次主动作：' + (nextPlanItem() ? '继续今天这一组的下一项' : '从待复查或下一段继续') + '。' +
+      '错过一天不退段、不扣 XP，下次从上次的位置继续即可。';
+  }
+
+  function showTodayWrap(celebrate) {
+    var box = $('today-wrap');
+    if (!box) return;
+    $('today-wrap-title').textContent = todayWrapTitle();
+    $('today-wrap-body').textContent = todayWrapText();
+    show(box, true);
+    if (celebrate) announce('今日目标已完成。');
+  }
+
   /* ------------------------------ 顶栏统计：进度 + 游戏化指标 ------------------------------ */
   function currentSection() {
     var q = currentQuestion();
@@ -2865,6 +3289,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       else { persist.textContent = ''; show(persist, false); }
     }
     renderAttempts();
+    renderTodayGroup();
   }
 
   /* 本题三次尝试：以状态机 learning.attempts 为准，不画血条、不显示生命值。 */
@@ -2879,7 +3304,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       return;
     }
     var left = a ? a.attemptsLeft : L.HEARTS_PER_LEVEL;
-    node.textContent = '本题剩余尝试 ' + left + '/3';
+    node.textContent = '本题独立尝试剩余 ' + left + ' 次';
   }
 
   /* ------------------------------ 左栏题号列表 ------------------------------ */
@@ -2901,6 +3326,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     if (!nav) return;
     nav.textContent = '';
     var activeSec = currentSection();
+    var anyMatch = false;
 
     SECTIONS.forEach(function (sec) {
       var qs = sec.questions.filter(questionMatches);
@@ -2908,6 +3334,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
       var head = el('div', null, 'group-head' + (isActive ? ' on' : ''));
       head.appendChild(el('span', '第 ' + sec.section + ' 段 · ' + sec.title, 'group-title'));
+      /* 段进度分母恒为该段全题数，筛选不改变分母（§4.2 / §5.2）。 */
       head.appendChild(el('span', passedInSection(sec) + '/' + sec.questions.length, 'group-count'));
       nav.appendChild(head);
 
@@ -2915,11 +3342,12 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
       var ul = el('ul', null, 'qgroup');
       qs.forEach(function (q) {
+        anyMatch = true;
         var li = el('li', null, q.id === currentId ? 'on' : '');
         li.setAttribute('role', 'button');
         li.setAttribute('tabindex', '0');
         li.setAttribute('data-qid', q.id);
-        li.setAttribute('aria-label', '第 ' + pad2(q.seq) + ' 题：' + (q.title || q.id));
+        li.setAttribute('aria-label', '第 ' + sec.section + ' 段第 ' + sectionIndexOf(sec, q) + ' 题：' + (q.title || q.id));
         var row = el('div', null, 'q-row');
         row.appendChild(el('span', pad2(q.seq), 'no'));
         row.appendChild(el('span', q.title || q.id, 'qt'));
@@ -2928,8 +3356,16 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
         var meta = el('span', null, 'qmeta');
         meta.appendChild(el('span', q.subject || '-', 'chip solid'));
         meta.appendChild(el('span', 'L' + q.level, 'chip'));
+        /* 「已完成」和「待复查 / 待修正」可以同时出现，不互相遮盖（§4.2）。 */
         if (state.passed[q.id]) meta.appendChild(el('span', '已完成', 'chip ok'));
         else if (state.wrong[q.id]) meta.appendChild(el('span', '待重做', 'chip warn'));
+        var rv = state.learning.review[q.id];
+        if (rv && rv.status === 'due') meta.appendChild(el('span', '待复查', 'chip warn'));
+        else if (rv && rv.status === 'needsFix') meta.appendChild(el('span', '待修正', 'chip warn'));
+        /* 搜索结果标段号 + 段内位置，避免 q005→q064 像难度跳变。 */
+        if (String(filter.kw || '').trim()) {
+          meta.appendChild(el('span', '本段第 ' + sectionIndexOf(sec, q) + ' 题', 'chip'));
+        }
         li.appendChild(meta);
 
         li.addEventListener('click', function () { selectLevel(q.id, false); });
@@ -2940,6 +3376,16 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       });
       nav.appendChild(ul);
     });
+
+    if (!anyMatch) {
+      var empty = el('div', null, 'group-empty');
+      empty.appendChild(el('span', '没有匹配的题。'));
+      var clr = el('button', '清空筛选', 'link-btn');
+      clr.type = 'button';
+      clr.addEventListener('click', function () { clearFilters(); announce('已清空筛选。'); });
+      empty.appendChild(clr);
+      nav.appendChild(empty);
+    }
   }
 
   function selectLevel(id, fromKeyboard) {
@@ -3366,6 +3812,14 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var post = $('post-pass-block');
     if (state.passed[q.id]) { renderPostPass(q); show(post, true); } else { show(post, false); }
 
+    /* 段末总结：所在段已完成时可回看（旧用户回看不重发 XP，不问是否首次）。 */
+    var transNow = L.sectionTransition(state, SECTIONS, q.id);
+    renderSectionSummary(transNow, false);
+    renderNextAction({
+      sectionCompleted: !!(transNow && transNow.completed),
+      goalMet: L.goalMet(state)
+    });
+
     renderStats();
   }
 
@@ -3698,9 +4152,19 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
     if (verdict.pass) {
       /* 唯一计分入口：recordLearningAttempt 判 + creditLearningEvent 结算。 */
+      var prevCelebrated = !!(state.learning && state.learning.daily && state.learning.daily.goalCelebrated);
       var fb = L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: true, stamp: stamp });
       var credit = L.creditLearningEvent(state, fb);
       saveProgress();
+      var trans = L.sectionTransition(state, SECTIONS, q.id);
+      var sectionCompleted = !!(trans && trans.completed);
+      var combined = sectionCompleted && !!credit.goalMet;
+      lastCombined = combined ? { section: trans.section } : null;
+      renderSectionSummary(trans, combined);
+      var justCelebrated = !!credit.goalCelebrated && !prevCelebrated;
+      if (credit.goalMet && !combined) showTodayWrap(justCelebrated);
+      else if (!credit.goalMet) show($('today-wrap'), false);
+      renderNextAction({ sectionCompleted: sectionCompleted, goalMet: !!credit.goalMet });
       renderPostPass(q);
       show($('post-pass-block'), true);
       var title, passNote;
@@ -3710,7 +4174,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       else { title = '通过 —— 不重复加 XP'; passNote = '结果与预期一致。'; }
       if (fb.completionType === 'guided') passNote += ' 本次按跟练完成记录。';
       renderVerdict('pass', title, verdict, ref.result.columns, passNote, {
-        action: '主动作：继续今日小组的下一题；次动作：回看本题语法卡 / 易错点回扣。',
+        action: null,
         orderSensitive: orderSensitive
       });
     } else {
@@ -3925,6 +4389,10 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var clr = $('btn-filter-clear');
     if (clr) clr.addEventListener('click', clearFilters);
 
+    /* 数据库重新初始化：失败后保留题面与草稿，主动重试。 */
+    var re = $('btn-reinit');
+    if (re) re.addEventListener('click', function () { initDb(); });
+
     /* 右侧抽屉 */
     $('btn-tables-drawer').addEventListener('click', function () { openDrawer('tables'); });
     $('btn-dialect-drawer').addEventListener('click', function () { openDrawer('dialect'); });
@@ -3994,6 +4462,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (resetPanel) resetPanel.hidden = true;
       state = L.freshState();
       L.ensureDay(state, L.todayStamp());
+      dailyPlan = L.buildDailyPlan(state, SECTIONS, L.todayStamp(), { unavailableIds: unavailableIds() });
       saveProgress();
       refCache = {};
       lastRun = null;
@@ -4014,31 +4483,21 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   }
 
   /* ------------------------------ 启动 ------------------------------ */
-  function boot() {
-    if (!L) { showBanner('load-banner', '初始化失败：关卡编排模块 HRLevels 缺失。'); return; }
-    if (!QUESTIONS.length) {
-      showBanner('load-banner', '题库为空：未能从内联数据中读到 questions。');
-      return;
-    }
-    bindUi();
+  function setDbEnabled(on) {
+    var run = $('btn-run'), judge = $('btn-judge'), re = $('btn-reinit');
+    if (run) run.disabled = !on;
+    if (judge) judge.disabled = !on;
+    if (re) re.hidden = on;
+  }
 
-    /* 品牌行题数按题库实际长度注入，避免下次扩容再改 HTML。 */
-    var brandMeta = $('brand-meta');
-    if (brandMeta) brandMeta.textContent = '题库 v1.0 · ' + QUESTIONS.length + ' 题';
-
-    /* 恢复上次所在关；无效则落回第一关。 */
-    var startId = state.current && QUESTION_BY_ID[state.current] ? state.current : SECTIONS[0].questions[0].id;
-    currentId = startId;
-    state.current = startId;
-    saveProgress();
-    renderNav();
-    renderStats();
-    renderDetail();
-
+  /* 数据库初始化抽成独立函数：失败时保留题面与草稿，禁用执行，并提供重新初始化。 */
+  function initDb() {
     if (!window.HRDb || typeof initSqlJs !== 'function') {
+      setDbEnabled(false);
       showBanner('load-banner', '初始化失败：内联脚本未完整加载（HRDb / initSqlJs 缺失）。');
       return;
     }
+    setDbEnabled(false);
     showBanner('load-banner', '正在初始化内置数据库（建表 + 灌数 + 11 表自检）…');
     window.HRDb.createDatabases(initSqlJs, {
       wasmBase64: BOOT.wasmBase64,
@@ -4050,8 +4509,13 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       db = r.db;
       refDb = r.refDb;
       dbReady = true;
+      setDbEnabled(true);
       /* 库就绪后补渲染一次码值对照：首屏渲染时库还没建好，查不了 HR_DICT。 */
       renderDictHints(currentQuestion());
+      /* 重新评估待复核题：参考 SQL 跑不通的题不进今日计划，并在换题时给出说明。 */
+      dailyPlan = L.buildDailyPlan(state, SECTIONS, L.todayStamp(), { unavailableIds: unavailableIds() });
+      saveProgress();
+      renderStats();
       /* 11 表行数对不上：页面红条提示，而不是白屏。 */
       if (!r.selfCheck.ok) {
         showBanner('selfcheck-banner', '库自检失败（' + r.selfCheck.okCount + '/' + r.selfCheck.total + ' 表不符）：' +
@@ -4059,8 +4523,46 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
             .map(function (t) { return t.table + ' 期望 ' + t.expected + ' 实得 ' + t.actual; }).join('；'));
       }
     })['catch'](function (e) {
-      showBanner('load-banner', '数据库初始化失败：' + (e && e.message ? e.message : e));
+      setDbEnabled(false);
+      showBanner('load-banner', '数据库初始化失败：' + (e && e.message ? e.message : e) +
+        '。题面与已写草稿保留，可点「重新初始化数据库」重试。');
     });
+  }
+
+  function boot() {
+    if (!L) { showBanner('load-banner', '初始化失败：关卡编排模块 HRLevels 缺失。'); return; }
+    if (!QUESTIONS.length) {
+      showBanner('load-banner', '题库为空：未能从内联数据中读到 questions。');
+      return;
+    }
+    /* 题库无有效段时不得访问不存在的 SECTIONS[0]。 */
+    if (!SECTIONS.length || !SECTIONS[0] || !SECTIONS[0].questions || !SECTIONS[0].questions.length) {
+      showBanner('load-banner', '课程资料异常：题库未能编成任何有效段。请检查 data/questions.json 的 section 字段。');
+      return;
+    }
+    bindUi();
+
+    /* 品牌行题数按题库实际长度注入，避免下次扩容再改 HTML。 */
+    var brandMeta = $('brand-meta');
+    if (brandMeta) brandMeta.textContent = '题库 v1.0 · ' + QUESTIONS.length + ' 题';
+
+    /* 同日恢复计划与已完成集合；跨日生成新计划但草稿不清。 */
+    var today = L.todayStamp();
+    L.ensureLearningDay(state, today);
+    dailyPlan = L.buildDailyPlan(state, SECTIONS, today, { unavailableIds: unavailableIds() });
+
+    /* 恢复上次所在关；无效则落到今日计划第一项，再退回第一关。 */
+    var startId = state.current && QUESTION_BY_ID[state.current] ? state.current
+      : (dailyPlan && dailyPlan.planIds.length && QUESTION_BY_ID[dailyPlan.planIds[0]] ? dailyPlan.planIds[0]
+        : SECTIONS[0].questions[0].id);
+    currentId = startId;
+    state.current = startId;
+    saveProgress();
+    renderNav();
+    renderStats();
+    renderDetail();
+
+    initDb();
   }
 
   if (document.readyState === 'loading') {
