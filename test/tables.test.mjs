@@ -45,16 +45,16 @@ function parseModelMarkdown(md) {
   return out;
 }
 
-test('model_notes_questions_map_to_all_20_seqs_with_nonempty_tables', () => {
+test('model_notes_questions_map_to_their_own_seqs_with_nonempty_tables', () => {
   const map = HRTables.questionTableMap(MODEL.questions);
-  assert.equal(Object.keys(map).length, 20, 'model-notes 必须覆盖 1..20 共 20 题');
-  const seqs = PACK.questions.map((q) => q.seq).sort((a, b) => a - b);
-  assert.deepEqual(seqs, Array.from({ length: 20 }, (_, i) => i + 1), '题库 seq 必须是 1..20');
-  for (const q of PACK.questions) {
-    const tables = HRTables.tablesForSeq(MODEL.questions, q.seq);
-    assert.ok(Array.isArray(tables) && tables.length > 0, `seq=${q.seq} 的 tables 必须非空`);
+  assert.equal(Object.keys(map).length, MODEL.questions.length, 'model-notes 必须覆盖自身全部条目');
+  const seqs = MODEL.questions.map((q) => q.id).sort((a, b) => a - b);
+  assert.deepEqual(seqs, Array.from({ length: MODEL.questions.length }, (_, i) => i + 1), 'model-notes seq 必须连续 1..N');
+  for (const q of MODEL.questions) {
+    const tables = HRTables.tablesForSeq(MODEL.questions, q.id);
+    assert.ok(Array.isArray(tables) && tables.length > 0, `seq=${q.id} 的 tables 必须非空`);
     for (const name of tables) {
-      assert.ok(HRTables.getTable(name), `seq=${q.seq} 引用了未知表 ${name}`);
+      assert.ok(HRTables.getTable(name), `seq=${q.id} 引用了未知表 ${name}`);
     }
   }
   /* id === seq 是任务卡的硬映射 */

@@ -26,11 +26,11 @@ function memStorage(seed) {
   };
 }
 
-test('sections_partition_20_questions_into_4_with_counts_5_7_6_2', () => {
+test('sections_partition_question_bank_into_4_with_counts_5_16_10_2', () => {
   const sections = L.buildSections(QUESTIONS);
-  assert.equal(sections.length, 4, '20 题必须正好分成 4 段');
+  assert.equal(sections.length, 4, '题库必须正好分成 4 段');
   assert.deepEqual(sections.map((s) => s.level), [1, 2, 3, 4], '段按 level 升序');
-  assert.deepEqual(sections.map((s) => s.questions.length), [5, 7, 6, 2], '各段关数 5/7/6/2');
+  assert.deepEqual(sections.map((s) => s.questions.length), [5, 16, 10, 2], '各段关数 5/16/10/2');
   assert.deepEqual(
     sections.map((s) => s.title),
     ['入门 · 单表查询', '进阶 · 分组与多表', '实战 · 子查询与口径', '挑战 · 视图与递归']
@@ -42,8 +42,14 @@ test('sections_partition_20_questions_into_4_with_counts_5_7_6_2', () => {
     for (const q of s.questions) assert.equal(q.level, s.level);
   }
   const allIds = sections.flatMap((s) => s.questions.map((q) => q.id));
-  assert.equal(allIds.length, 20);
-  assert.equal(new Set(allIds).size, 20, '20 关不重不漏');
+  assert.equal(allIds.length, QUESTIONS.length, '编排结果必须覆盖题库全部题目');
+  assert.equal(new Set(allIds).size, QUESTIONS.length, '关卡不重不漏');
+});
+
+test('question_bank_has_33_questions_with_contiguous_seq_1_to_33', () => {
+  assert.equal(QUESTIONS.length, 33, '题库必须为 33 题');
+  const seqs = QUESTIONS.map((q) => q.seq).sort((a, b) => a - b);
+  assert.deepEqual(seqs, Array.from({ length: 33 }, (_, i) => i + 1), 'seq 必须连续 1..33');
 });
 
 test('wrong_answer_loses_heart_and_records_wrong_book', () => {

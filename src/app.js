@@ -1,7 +1,7 @@
 /*
  * src/app.js — HR 语境 SQL 练习台 界面逻辑（DOM 操作）—— UI 收敛版（2026-10-10）
  * ---------------------------------------------------------------------------
- * 本次只改「UI 与信息呈现」：判题口径、题库、20 题内容、数据（tables.js / 内联种子）一律未动。
+ * 本次只改「UI 与信息呈现」：判题口径、题库、题目内容、数据（tables.js / 内联种子）一律未动。
  * 布局：左栏题号列表 + 主列（题面 / 深色编辑器 / 结果）；表结构、方言对照改右侧抽屉（默认收起）。
  * 游戏化：只保留段/关进度与通关徽章；XP、连击、今日配额、心形生命值全部不再呈现。
  *
@@ -239,7 +239,8 @@
     /* HRIS 裁定 3：本题结果规模数字移到渐进提示最后一层；
        expected_note 里的答案数字（以「正确答案」开头）永不上屏、不进判题。 */
     var note = q && q.expected_note;
-    if (note && note.indexOf('正确答案') !== 0) list.push(note);
+    /* 字段不存在或为空串时不得渲染任何提示块：只认非空字符串。 */
+    if (typeof note === 'string' && note.trim() && note.indexOf('正确答案') !== 0) list.push(note);
     return list;
   }
 
@@ -1065,6 +1066,10 @@
       return;
     }
     bindUi();
+
+    /* 品牌行题数按题库实际长度注入，避免下次扩容再改 HTML。 */
+    var brandMeta = $('brand-meta');
+    if (brandMeta) brandMeta.textContent = '题库 v1.0 · ' + QUESTIONS.length + ' 题';
 
     /* 恢复上次所在关；无效则落回第一关。 */
     var startId = state.current && QUESTION_BY_ID[state.current] ? state.current : SECTIONS[0].questions[0].id;

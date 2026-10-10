@@ -30,7 +30,7 @@
   var HEARTS_PER_LEVEL = 3;
   var XP_PER_LEVEL = 10;
 
-  /* 段标题：20 题按 level 字段天然分成 4 段（5 / 7 / 6 / 2 关）。
+  /* 段标题：33 题按 level 字段天然分成 4 段（5 / 16 / 10 / 2 关）。
      这里只登记标题；段的成员完全由题目 level 决定，新增题目无需改这张表。 */
   var SECTION_TITLES = {
     1: '入门 · 单表查询',

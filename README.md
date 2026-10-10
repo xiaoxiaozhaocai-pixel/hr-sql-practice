@@ -1,10 +1,10 @@
 # DB Quest v2 · HR 语境 SQL 闯关（单文件 HTML）
 
-一个**完全离线、零后端、零依赖**的多邻国式 SQL 闯关页：把权威数据库结构、种子数据、20 道 HR 业务题、
+一个**完全离线、零后端、零依赖**的多邻国式 SQL 闯关页：把权威数据库结构、种子数据、33 道 HR 业务题、
 判题引擎与游戏化闯关壳全部打成一个 HTML 文件，双击即可闯关。产物 `dist/hr-sql-practice.html`
 **不发起任何网络请求**（构建自检会拦住任何外链）。
 
-- 关卡编排：20 题按 `level` 字段分 4 段（入门 5 关 / 进阶 7 关 / 实战 6 关 / 挑战 2 关），段内严格按 `seq` 递进
+- 关卡编排：题库按 `level` 字段自动分 4 段（入门 5 关 / 进阶 16 关 / 实战 10 关 / 挑战 2 关；当前共 33 题），段内严格按 `seq` 递进
 - 网页端执行引擎：**SQLite**（内联的 sql.js **1.14.2** / WebAssembly，WASM 以 base64 内联，**零 CDN**）
 - 权威写法：**SQL Server（T-SQL）**，题库里以 `reference_sql` 字段保留，**只展示、不执行**
 - 基准日：写死 `2026-06-30`，全库不使用任何动态时间函数
@@ -65,7 +65,7 @@ data/                      只读权威输入（不要改）
   schema_sqlite.sql        SQLite 建表 + 3 个视图
   seed_sqlite.sql          SQLite 插数（11 表 4842 行）
   rowcount_expected.json   11 表期望行数（启动自检用）
-  questions.json           20 题题库（唯一的题库来源）
+  questions.json           题库（唯一的题库来源；当前 33 题）
 docs/                      文档（题目契约、口径裁定、转写说明）
 vendor/sqljs/              只读的 sql.js 1.14.2 发行文件
 src/
@@ -249,7 +249,8 @@ judgeResult(userRows, userColumns, refRows, refColumns, options) -> verdict
    **列数不一致判不通过**。**工程侧实现无需改动**（与该裁定一致）。
    若日后改判「必须比」，改动点只有 `src/judge.js`，验证用例是 `test/judge.test.mjs` 的
    `different_column_names_same_position_passes_with_column_issue`。
-2. `expected.row_count` 的固化范围：目前 20 题都有值，是不是所有新题都必须回填？
+2. `expected.row_count` 的固化范围：v1 记录（批1 录入前）为题 1..20 都有值；批1 追加的 13 题（seq 21..33）
+   亦已按契约回填数值——「所有新题是否都必须回填」仍待业务侧确认。
 3. `order_sensitive` 是否需要按题目可配（当前字段已支持，题库里都是默认 `false`）。
 4. 数值口径的边界：`1.005` 这类恰好落在半分位上的值，是「十进制四舍五入到 1.01」（当前实现）
    还是「按 IEEE754 实际值截断到 1.00」？契约只写了「四舍五入」，未给边界例子。

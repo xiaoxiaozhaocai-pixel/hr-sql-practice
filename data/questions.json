@@ -2552,6 +2552,1181 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09"
+    },
+    {
+      "id": "q021",
+      "seq": 21,
+      "title": "花名册交叉盘点：各雇佣类型下的男女人数",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "多列分组（GROUP BY 多列）",
+      "secondary_points": [
+        "COUNT(*)",
+        "NULL 自成一组",
+        "多键排序"
+      ],
+      "stem": "花名册结构盘点要一张“雇佣类型 × 性别”的人力分布表。有人只按雇佣类型数了一遍，得到的是每个类型一个数字，看不出“实习生里女生占多数”这类信息。",
+      "requirement": "按雇佣类型(EmpTypeCode)、性别(GenderCode)两个维度分组，统计每个组合的人数；雇佣类型为空的行也要保留（当作“未分类”）。",
+      "output_hint": "三列：雇佣类型、性别、人数；按雇佣类型升序、性别升序；共 10 行。",
+      "hint": "分组时要把两个字段都写进 GROUP BY，才能得到交叉的结果；空值也会各自成为一个分组，不会被丢掉。",
+      "reference_sql": "SELECT EmpTypeCode AS 雇佣类型, GenderCode AS 性别, COUNT(*) AS 人数\nFROM dbo.HR_EMPLOYEE\nGROUP BY EmpTypeCode, GenderCode\nORDER BY EmpTypeCode ASC, GenderCode ASC;",
+      "reference_sql_sqlite": "SELECT EmpTypeCode AS 雇佣类型, GenderCode AS 性别, COUNT(*) AS 人数\nFROM HR_EMPLOYEE\nGROUP BY EmpTypeCode, GenderCode\nORDER BY EmpTypeCode ASC, GenderCode ASC;",
+      "expected": {
+        "columns": [
+          "雇佣类型",
+          "性别",
+          "人数"
+        ],
+        "row_count": 10,
+        "rows": [
+          [
+            null,
+            "F",
+            4
+          ],
+          [
+            null,
+            "M",
+            4
+          ],
+          [
+            "DISPATCH",
+            "F",
+            4
+          ],
+          [
+            "DISPATCH",
+            "M",
+            5
+          ],
+          [
+            "FULLTIME",
+            "F",
+            60
+          ],
+          [
+            "FULLTIME",
+            "M",
+            76
+          ],
+          [
+            "INTERN",
+            "F",
+            13
+          ],
+          [
+            "INTERN",
+            "M",
+            4
+          ],
+          [
+            "OUTSOURCE",
+            "F",
+            9
+          ],
+          [
+            "OUTSOURCE",
+            "M",
+            21
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "只 GROUP BY EmpTypeCode：每个类型只剩一个数字，男女被合并，看不出性别分布——本题要的是“两列交叉”分组。",
+        "以为 NULL 的雇佣类型会被自动丢弃：GROUP BY 会把 NULL 也当成一个独立分组，8 名雇佣类型为空的人会单独成行（男女各一行）。",
+        "人数用 COUNT(GenderCode) 而不是 COUNT(*)：本例性别无缺失时两者相同，但一旦有人性别为空，COUNT(列) 会少计，统计“人”应统一用 COUNT(*)。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎对 NULL 分组一致（NULL 自成一组）；升序排序时 NULL 默认排在最前（两引擎一致）。",
+      "tags": [
+        "GROUP BY 多列",
+        "多列分组",
+        "NULL 分组",
+        "交叉汇总"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q022",
+      "seq": 22,
+      "title": "各雇佣类型的在职与离职人数（一行两个口径）",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "条件聚合 SUM(CASE WHEN …)",
+      "secondary_points": [
+        "CASE WHEN",
+        "一行并列两个口径",
+        "SUM 与 NULL"
+      ],
+      "stem": "人力月报想在一行里同时看到各雇佣类型的“在职”和“离职”人数，而不是拉两张表再对齐。有人用两次查询分别数再拼，费劲还容易对不上。",
+      "requirement": "按雇佣类型(EmpTypeCode)统计人数，“在职”= 离职日期(TermDate)为空，“离职”= 离职日期非空；两个口径放在同一行的两列里。",
+      "output_hint": "三列：雇佣类型、在职人数、离职人数；按雇佣类型升序；共 5 行。",
+      "hint": "不用分两次查——在一次分组里用 SUM(CASE WHEN 条件 THEN 1 ELSE 0 END)，就能把同一批行“分流”到两列。",
+      "reference_sql": "SELECT EmpTypeCode AS 雇佣类型,\n       SUM(CASE WHEN TermDate IS NULL     THEN 1 ELSE 0 END) AS 在职人数,\n       SUM(CASE WHEN TermDate IS NOT NULL THEN 1 ELSE 0 END) AS 离职人数\nFROM dbo.HR_EMPLOYEE\nGROUP BY EmpTypeCode\nORDER BY EmpTypeCode;",
+      "reference_sql_sqlite": "SELECT EmpTypeCode AS 雇佣类型,\n       SUM(CASE WHEN TermDate IS NULL     THEN 1 ELSE 0 END) AS 在职人数,\n       SUM(CASE WHEN TermDate IS NOT NULL THEN 1 ELSE 0 END) AS 离职人数\nFROM HR_EMPLOYEE\nGROUP BY EmpTypeCode\nORDER BY EmpTypeCode;",
+      "expected": {
+        "columns": [
+          "雇佣类型",
+          "在职人数",
+          "离职人数"
+        ],
+        "row_count": 5,
+        "rows": [
+          [
+            null,
+            5,
+            3
+          ],
+          [
+            "DISPATCH",
+            8,
+            1
+          ],
+          [
+            "FULLTIME",
+            118,
+            18
+          ],
+          [
+            "INTERN",
+            11,
+            6
+          ],
+          [
+            "OUTSOURCE",
+            28,
+            2
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "SUM(CASE WHEN … THEN 1 END) 漏写 ELSE 0：不匹配时返回 NULL，而 NULL 参与加法会让整列变 NULL（NULL + 1 = NULL），结果整列为空——务必给 ELSE 0。",
+        "分两条 SQL 分别数再手工对齐：容易漏掉某个类型，行数对不上，也无法保证两边是同一口径。",
+        "把“在职”理解成 IsActive = 1：IsActive 是 1/0/NULL 混用的脏字段，与真实在职状态不一致，口径不可靠。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "SUM / CASE WHEN 两引擎一致。",
+      "tags": [
+        "条件聚合",
+        "CASE WHEN",
+        "在职口径",
+        "一行两口径"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q023",
+      "seq": 23,
+      "title": "每个班组的当前主职人数——没人的班组也要列出来",
+      "subject": "组织",
+      "level": 2,
+      "knowledge_point": "LEFT JOIN + 空组补 0（NULL 陷阱）",
+      "secondary_points": [
+        "LEFT JOIN 保持主表",
+        "COUNT(列) 与 COUNT(*)",
+        "连接条件写在 ON"
+      ],
+      "stem": "班组定员盘点要一张“全部 4 级班组 × 当前主职人数”的清单，包括一个还没配人的新班组，也要显示 0，而不是从表里消失。有人用 INNER JOIN 写，4 个空班组整行不见了。",
+      "requirement": "列出全部 4 级组织(班组)及其当前主职人数（当前口径：IsPrimary = 1 且结束日为空）；没有任何在职人员的班组，人数显示 0。",
+      "output_hint": "三列：组织编码、组织名、在职人数；按在职人数降序、组织编码升序；共 23 行（含 4 个 0 人班组）。",
+      "hint": "要让“没人”的班组也出现，得以组织表为主表用 LEFT JOIN 挂上任职表；筛选任职的条件写在 ON 里，数人数时用 COUNT(a.ID) 而不是 COUNT(*)。",
+      "reference_sql": "SELECT o.OrgCode AS 组织编码, o.OrgName AS 组织名, COUNT(a.ID) AS 在职人数\nFROM dbo.HR_ORG AS o\nLEFT JOIN dbo.HR_ASSIGNMENT AS a\n       ON a.OrgID = o.ID AND a.IsPrimary = 1 AND a.EndDate IS NULL\nWHERE o.OrgLevel = 4\nGROUP BY o.ID, o.OrgCode, o.OrgName\nORDER BY 在职人数 DESC, o.OrgCode ASC;",
+      "reference_sql_sqlite": "SELECT o.OrgCode AS 组织编码, o.OrgName AS 组织名, COUNT(a.ID) AS 在职人数\nFROM HR_ORG AS o\nLEFT JOIN HR_ASSIGNMENT AS a\n       ON a.OrgID = o.ID AND a.IsPrimary = 1 AND a.EndDate IS NULL\nWHERE o.OrgLevel = 4\nGROUP BY o.ID, o.OrgCode, o.OrgName\nORDER BY 在职人数 DESC, o.OrgCode ASC;",
+      "expected": {
+        "columns": [
+          "组织编码",
+          "组织名",
+          "在职人数"
+        ],
+        "row_count": 23,
+        "rows": [
+          [
+            "33",
+            "动力班",
+            13
+          ],
+          [
+            "34",
+            "仓储组",
+            13
+          ],
+          [
+            "25",
+            "一班",
+            12
+          ],
+          [
+            "28",
+            "一班",
+            12
+          ],
+          [
+            "35",
+            "配送组",
+            12
+          ],
+          [
+            "20",
+            "三班",
+            11
+          ],
+          [
+            "21",
+            "四班",
+            11
+          ],
+          [
+            "23",
+            "二班",
+            10
+          ],
+          [
+            "31",
+            "维修班",
+            10
+          ],
+          [
+            "18",
+            "一班",
+            9
+          ],
+          [
+            "32",
+            "电气班",
+            8
+          ],
+          [
+            "19",
+            "二班",
+            7
+          ],
+          [
+            "22",
+            "一班",
+            7
+          ],
+          [
+            "26",
+            "二班",
+            7
+          ],
+          [
+            "30",
+            "三班",
+            7
+          ],
+          [
+            "29",
+            "二班",
+            6
+          ],
+          [
+            "24",
+            "三班",
+            4
+          ],
+          [
+            "27",
+            "三班",
+            4
+          ],
+          [
+            "36",
+            "工艺一组",
+            4
+          ],
+          [
+            "37",
+            "工艺二组",
+            0
+          ],
+          [
+            "38",
+            "工艺三组",
+            0
+          ],
+          [
+            "39",
+            "功能测试组",
+            0
+          ],
+          [
+            "40",
+            "可靠性测试组",
+            0
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 INNER JOIN：4 个零人班组（工艺二组、工艺三组、功能测试组、可靠性测试组）直接消失，只剩 19 行。",
+        "LEFT JOIN 却用 COUNT(*)：空组那一行 a 的字段全是 NULL，但 COUNT(*) 仍会数这一行，0 变成了 1。",
+        "把 IsPrimary / EndDate 条件写进 WHERE 而不是 ON：写在 WHERE 会把 LEFT JOIN 退化成 INNER JOIN，空组又被过滤掉。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "COUNT 语义两引擎一致；本例无需 IFNULL/COALESCE，因为 COUNT(列) 永不为 NULL。",
+      "tags": [
+        "LEFT JOIN",
+        "空组补0",
+        "COUNT(列)",
+        "变体题"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q024",
+      "seq": 24,
+      "title": "任职记录一共多少段、涉及多少人",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "COUNT(*) 与 COUNT(DISTINCT) 的差异（去重计数）",
+      "secondary_points": [
+        "COUNT(DISTINCT 列)",
+        "一人多段任职"
+      ],
+      "stem": "有人报“任职表里有 243 条记录”，另一位同事说“其实就是 200 个人”。两个人数的口径不同，报表标签最容易张冠李戴。",
+      "requirement": "用一次查询输出两列：任职记录总段数（COUNT(*)）与涉及的员工人数（COUNT(DISTINCT EmpNo)）。",
+      "output_hint": "两列：任职段数、涉及员工数；一行；正确值 243 与 200。",
+      "hint": "COUNT(*) 数的是行数；要数“有多少个不同的人”，得用 COUNT(DISTINCT 列) 去重。",
+      "reference_sql": "SELECT COUNT(*) AS 任职段数, COUNT(DISTINCT EmpNo) AS 涉及员工数\nFROM dbo.HR_ASSIGNMENT;",
+      "reference_sql_sqlite": "SELECT COUNT(*) AS 任职段数, COUNT(DISTINCT EmpNo) AS 涉及员工数\nFROM HR_ASSIGNMENT;",
+      "expected": {
+        "columns": [
+          "任职段数",
+          "涉及员工数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            243,
+            200
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "两列都用 COUNT(*)：得到 243 与 243，把“段数”当成了“人数”。",
+        "用 COUNT(EmpNo) 代替 COUNT(DISTINCT EmpNo)：EmpNo 非空，结果还是 243，没有任何去重效果。",
+        "忘了这是“一人多段”的数据：不 DISTINCT 就会把 43 个多段员工重复计入人数。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "COUNT / COUNT(DISTINCT) 两引擎一致。",
+      "tags": [
+        "COUNT DISTINCT",
+        "去重计数",
+        "任职段",
+        "一人多段"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q025",
+      "seq": 25,
+      "title": "各学历在职员工占比（保留 1 位小数）",
+      "subject": "员工",
+      "level": 2,
+      "knowledge_point": "占比计算 + 整数除法陷阱",
+      "secondary_points": [
+        "SUM(CASE WHEN)",
+        "100.0 强制浮点",
+        "ROUND",
+        "标量子查询做分母"
+      ],
+      "stem": "人才盘点要一张“在职员工学历结构”表，除了人数还要占比(%)。有人写成 100*人数/总人数，结果占比全成了整数，甚至有 0。",
+      "requirement": "按学历(EducationCode)统计在职人数(TermDate 为空)，并算出其占全部在职员工的百分比，百分比保留 1 位小数。",
+      "output_hint": "三列：学历、在职人数、占比(%)；按人数降序；共 4 行；占比合计约 100.0。",
+      "hint": "整数相除会截断（100*94/170 得 55，不是 55.3），除法里至少要有一个小数，写成 100.0*…；分母用“全部在职人数”。",
+      "reference_sql": "SELECT EducationCode AS 学历,\n       SUM(CASE WHEN TermDate IS NULL THEN 1 ELSE 0 END) AS 在职人数,\n       ROUND(100.0 * SUM(CASE WHEN TermDate IS NULL THEN 1 ELSE 0 END)\n             / (SELECT COUNT(*) FROM dbo.HR_EMPLOYEE WHERE TermDate IS NULL), 1) AS 占比\nFROM dbo.HR_EMPLOYEE\nGROUP BY EducationCode\nORDER BY 在职人数 DESC;",
+      "reference_sql_sqlite": "SELECT EducationCode AS 学历,\n       SUM(CASE WHEN TermDate IS NULL THEN 1 ELSE 0 END) AS 在职人数,\n       ROUND(100.0 * SUM(CASE WHEN TermDate IS NULL THEN 1 ELSE 0 END)\n             / (SELECT COUNT(*) FROM HR_EMPLOYEE WHERE TermDate IS NULL), 1) AS 占比\nFROM HR_EMPLOYEE\nGROUP BY EducationCode\nORDER BY 在职人数 DESC;",
+      "expected": {
+        "columns": [
+          "学历",
+          "在职人数",
+          "占比"
+        ],
+        "row_count": 4,
+        "rows": [
+          [
+            "BACHELOR",
+            94,
+            55.3
+          ],
+          [
+            "ZSB",
+            40,
+            23.5
+          ],
+          [
+            "HS",
+            24,
+            14.1
+          ],
+          [
+            "MASTER",
+            12,
+            7.1
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "整数除法：写成 100*在职人数/总数，两引擎都按整数截断，55.3 被算成 55。",
+        "分母写成“全表 200 人”（含离职）：占比合计不足 100%，人数与分母口径不一致。",
+        "忘记 ROUND：浮点结果可能出现 55.2941176… 一长串小数，展示与判题都要 ROUND(…,1)。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "100.0 强制浮点两引擎一致；整数相除两引擎都是截断（非四舍五入）。",
+      "tags": [
+        "占比",
+        "整数除法",
+        "ROUND",
+        "取整口径",
+        "变体题"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q026",
+      "seq": 26,
+      "title": "全年实发工资最高的前 3 个月",
+      "subject": "薪酬",
+      "level": 2,
+      "knowledge_point": "分组 + 排序 + 取前 N",
+      "secondary_points": [
+        "SUM",
+        "ORDER BY DESC",
+        "TOP / LIMIT 方言"
+      ],
+      "stem": "薪酬复盘要挑出“发放额最高的几个月份”重点看。有人把 12 个月的合计导出来再手工排序，其实 SQL 一次就能取前几名。",
+      "requirement": "按薪酬期间(SalaryMonth)统计实发工资(NetPay)合计，按合计从高到低取前 3 个月。",
+      "output_hint": "两列：月份、实发合计；按合计降序；共 3 行。",
+      "hint": "先 GROUP BY 月份汇总，再排序；“取前 N”在 SQL Server 用 TOP，在 SQLite 用 LIMIT。",
+      "reference_sql": "SELECT TOP 3 SalaryMonth AS 月份, ROUND(SUM(NetPay), 2) AS 实发合计\nFROM dbo.HR_SALARY\nGROUP BY SalaryMonth\nORDER BY SUM(NetPay) DESC;",
+      "reference_sql_sqlite": "SELECT SalaryMonth AS 月份, ROUND(SUM(NetPay), 2) AS 实发合计\nFROM HR_SALARY\nGROUP BY SalaryMonth\nORDER BY SUM(NetPay) DESC\nLIMIT 3;",
+      "expected": {
+        "columns": [
+          "月份",
+          "实发合计"
+        ],
+        "row_count": 3,
+        "rows": [
+          [
+            "202605",
+            2394382.49
+          ],
+          [
+            "202606",
+            2377331.99
+          ],
+          [
+            "202604",
+            2265346.2
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "在 SQL Server 里用 LIMIT：LIMIT 是 SQLite/MySQL 语法，SQL Server 要写 TOP 3（放在 SELECT 后面）。",
+        "排序方向写反（正序），取到的是最低的 3 个月。",
+        "先取明细前 3 行再汇总：TOP/LIMIT 在聚合前生效会取错，必须“先分组、再排序、最后取前 N”。",
+        "忘记 ROUND：SQLite 求和可能出现浮点尾差。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "取前 N：SQL Server 用 TOP 3，SQLite 用 LIMIT 3；其余一致。注意本轮禁用的是 TOP n PERCENT，普通 TOP n 可用。",
+      "tags": [
+        "ORDER BY 分组排序",
+        "取前N",
+        "TOP",
+        "LIMIT",
+        "方言"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q027",
+      "seq": 27,
+      "title": "各组织类型的组织数与占比",
+      "subject": "组织",
+      "level": 2,
+      "knowledge_point": "分组小计与总计对比（占比）",
+      "secondary_points": [
+        "标量子查询求总计",
+        "100.0 强制浮点",
+        "ROUND"
+      ],
+      "stem": "组织架构盘点要说明“部门占总数多少、班组占多少”。有人逐个手算比例，组织数一变就得全部重算。占比的分母应该是“全库组织总数”。",
+      "requirement": "按组织类型(OrgTypeCode)统计组织数量及其占全部组织数的百分比（保留 1 位小数）。",
+      "output_hint": "三列：组织类型、组织数、占比(%)；按组织数降序；共 5 行。",
+      "hint": "占比 = 本组数量 ÷ 全部组织数；分母（总计）用一个子查询 (SELECT COUNT(*) FROM 组织表) 现场算，别写死数字。",
+      "reference_sql": "SELECT OrgTypeCode AS 组织类型,\n       COUNT(*) AS 组织数,\n       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM dbo.HR_ORG), 1) AS 占比\nFROM dbo.HR_ORG\nGROUP BY OrgTypeCode\nORDER BY 组织数 DESC;",
+      "reference_sql_sqlite": "SELECT OrgTypeCode AS 组织类型,\n       COUNT(*) AS 组织数,\n       ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM HR_ORG), 1) AS 占比\nFROM HR_ORG\nGROUP BY OrgTypeCode\nORDER BY 组织数 DESC;",
+      "expected": {
+        "columns": [
+          "组织类型",
+          "组织数",
+          "占比"
+        ],
+        "row_count": 5,
+        "rows": [
+          [
+            "TEAM",
+            23,
+            57.5
+          ],
+          [
+            "DEPT",
+            12,
+            30
+          ],
+          [
+            "PLANT",
+            2,
+            5
+          ],
+          [
+            "CENTER",
+            2,
+            5
+          ],
+          [
+            "COMPANY",
+            1,
+            2.5
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "分母写死 40：数据一变就错，也违背“小计与总计同源”的原则。",
+        "忘记 100.0：整数除法把 23/40 算成 0。",
+        "把占比按“分了 5 组”平均（1/5 = 20%）：分母用错，得到的是“组数占比”而不是“组织数占比”。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "标量子查询做分母两引擎一致。",
+      "tags": [
+        "占比",
+        "小计与总计",
+        "子查询分母",
+        "多维汇总"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q028",
+      "seq": 28,
+      "title": "各岗位族、各职级的当前在职人数",
+      "subject": "综合",
+      "level": 2,
+      "knowledge_point": "多维汇总（按岗位族 × 职级多列分组）",
+      "secondary_points": [
+        "JOIN 岗位标准",
+        "多列 GROUP BY",
+        "当前主职口径"
+      ],
+      "stem": "岗位结构盘点要看到“技术族里各职级有多少人、管理族里各职级有多少人”。这是典型的两维交叉汇总，不是一份一维名单。",
+      "requirement": "统计当前主职在职人数，按岗位族(JobFamilyCode)与职级(JobLevelCode)两维分组。当前口径：IsPrimary = 1 且结束日为空。",
+      "output_hint": "三列：岗位族、职级、人数；按人数降序；共 5 行。",
+      "hint": "岗位族、职级都存在岗位标准表(HR_JOB)里，先通过任职表的 JobCode JOIN 过去；两维汇总就把两列都写进 GROUP BY。",
+      "reference_sql": "SELECT j.JobFamilyCode AS 岗位族, j.JobLevelCode AS 职级, COUNT(*) AS 人数\nFROM dbo.HR_ASSIGNMENT AS a\nJOIN dbo.HR_JOB AS j ON j.JobCode = a.JobCode\nWHERE a.IsPrimary = 1 AND a.EndDate IS NULL\nGROUP BY j.JobFamilyCode, j.JobLevelCode\nORDER BY 人数 DESC;",
+      "reference_sql_sqlite": "SELECT j.JobFamilyCode AS 岗位族, j.JobLevelCode AS 职级, COUNT(*) AS 人数\nFROM HR_ASSIGNMENT AS a\nJOIN HR_JOB AS j ON j.JobCode = a.JobCode\nWHERE a.IsPrimary = 1 AND a.EndDate IS NULL\nGROUP BY j.JobFamilyCode, j.JobLevelCode\nORDER BY 人数 DESC;",
+      "expected": {
+        "columns": [
+          "岗位族",
+          "职级",
+          "人数"
+        ],
+        "row_count": 5,
+        "rows": [
+          [
+            "OPER",
+            "P1",
+            65
+          ],
+          [
+            "MGMT",
+            "M2",
+            51
+          ],
+          [
+            "MGMT",
+            "M3",
+            47
+          ],
+          [
+            "TECH",
+            "P4",
+            4
+          ],
+          [
+            "FUNC",
+            "P3",
+            3
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "不加 IsPrimary = 1 / EndDate IS NULL：把兼岗和历史任职段也算进来，人数虚高。",
+        "只按职级一维分组：看不出岗位族，任务要的是“两维交叉”。",
+        "直接对 HR_JOB 分组计数：岗位标准表是“岗位目录”，不是“人头”，会数成岗位条数而不是在职人数。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎一致。",
+      "tags": [
+        "多维汇总",
+        "岗位族",
+        "职级",
+        "GROUP BY 多列",
+        "组织岗位"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q029",
+      "seq": 29,
+      "title": "各考核周期的等级人数分布（未参评单列）",
+      "subject": "绩效",
+      "level": 2,
+      "knowledge_point": "分档计数 + NULL 作为独立分组",
+      "secondary_points": [
+        "GROUP BY 多列",
+        "COALESCE 给空值命名",
+        "NULL 不等于“没有记录”"
+      ],
+      "stem": "绩效沟通会要一张“各周期的 S/A/B/C/D 各多少人”，并要求把“没参评”单列出来。有人只数了有等级的，参评率一算就偏高。",
+      "requirement": "按考核周期(PeriodCode)与等级(GradeCode)统计人数；等级为空（未参评/无等级）的记录也要单独成行，等级列用“未参评”显示。",
+      "output_hint": "三列：考核周期、等级、人数；按周期、等级升序；共 12 行（每周期 6 行，含 1 行“未参评”）。",
+      "hint": "等级为空不代表记录不存在，GROUP BY 会把它当成一个独立分组；可用 COALESCE(GradeCode,'未参评') 给这一组起个名字，别用 WHERE 把它提前滤掉。",
+      "reference_sql": "SELECT PeriodCode AS 考核周期, COALESCE(GradeCode,'未参评') AS 等级, COUNT(*) AS 人数\nFROM dbo.HR_PERFORMANCE\nGROUP BY PeriodCode, COALESCE(GradeCode,'未参评')\nORDER BY PeriodCode, 等级;",
+      "reference_sql_sqlite": "SELECT PeriodCode AS 考核周期, COALESCE(GradeCode,'未参评') AS 等级, COUNT(*) AS 人数\nFROM HR_PERFORMANCE\nGROUP BY PeriodCode, COALESCE(GradeCode,'未参评')\nORDER BY PeriodCode, 等级;",
+      "expected": {
+        "columns": [
+          "考核周期",
+          "等级",
+          "人数"
+        ],
+        "row_count": 12,
+        "rows": [
+          [
+            "2025H2",
+            "A",
+            22
+          ],
+          [
+            "2025H2",
+            "B",
+            41
+          ],
+          [
+            "2025H2",
+            "C",
+            40
+          ],
+          [
+            "2025H2",
+            "D",
+            10
+          ],
+          [
+            "2025H2",
+            "S",
+            14
+          ],
+          [
+            "2025H2",
+            "未参评",
+            22
+          ],
+          [
+            "2026H1",
+            "A",
+            23
+          ],
+          [
+            "2026H1",
+            "B",
+            54
+          ],
+          [
+            "2026H1",
+            "C",
+            48
+          ],
+          [
+            "2026H1",
+            "D",
+            14
+          ],
+          [
+            "2026H1",
+            "S",
+            15
+          ],
+          [
+            "2026H1",
+            "未参评",
+            12
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "加 WHERE GradeCode IS NOT NULL：未参评者（2025H2 有 22 人、2026H1 有 12 人）被隐藏，参评率会虚高。",
+        "只按等级分组、不按周期：两个周期的数字被混在一起，看不出变化。",
+        "以为“等级空”就是“没有这条记录”：这些是真实存在的绩效记录，只是没分数、没等级，不能被当成不存在。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "COALESCE 两引擎一致（SQL Server 亦可用 ISNULL，但 COALESCE 通用）。",
+      "tags": [
+        "GROUP BY 多列",
+        "NULL 分组",
+        "COALESCE",
+        "绩效等级",
+        "变体题"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q030",
+      "seq": 30,
+      "title": "全年人均实发工资——别把外币算进来",
+      "subject": "薪酬",
+      "level": 3,
+      "knowledge_point": "口径陷阱：跨币种直接 AVG",
+      "secondary_points": [
+        "AVG 跳过 NULL",
+        "条件聚合做第二口径",
+        "跨币种不可混算"
+      ],
+      "stem": "薪酬表里混着人民币、美元、卢比（海外派驻员工）。有人直接对整列 AVG 求出“人均实发”，被财务指出：外币和人民币量级不同，混在一起的“平均”没有意义。",
+      "requirement": "分别算出“全库记录人均实发”（不做币种区分）与“仅人民币(CNY)记录人均实发”，两列并排、各保留 2 位小数，以暴露口径差异。",
+      "output_hint": "两列：全库人均、人民币人均；一行；正确值 13779.18 与 14167.59。",
+      "hint": "想同时看到两个口径，就在一次查询里用条件表达式：一个 AVG 不设限，另一个只在 CurrencyCode='CNY' 时取值。",
+      "reference_sql": "SELECT ROUND(AVG(NetPay), 2) AS 全库人均,\n       ROUND(AVG(CASE WHEN CurrencyCode = 'CNY' THEN NetPay END), 2) AS 人民币人均\nFROM dbo.HR_SALARY;",
+      "reference_sql_sqlite": "SELECT ROUND(AVG(NetPay), 2) AS 全库人均,\n       ROUND(AVG(CASE WHEN CurrencyCode = 'CNY' THEN NetPay END), 2) AS 人民币人均\nFROM HR_SALARY;",
+      "expected": {
+        "columns": [
+          "全库人均",
+          "人民币人均"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            13779.18,
+            14167.59
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "以为“平均数”怎么算都一样：把美元、卢比混进人民币求平均，全库人均 13779.18，比本币口径低近 400。",
+        "用 WHERE CurrencyCode='CNY' 去求“全库人均”：那不是全库，是本币口径，标签与数值名实不符。",
+        "写 AVG(CASE WHEN … THEN NetPay ELSE 0 END)：把非本币记录当成 0 拉低均值，应省去 ELSE（不匹配即 NULL，被 AVG 跳过）。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "AVG 跳过 NULL 两引擎一致。本题是 q010（币种不可混算）的口径变体，从“求和”换到“平均”。",
+      "tags": [
+        "口径陷阱",
+        "币种",
+        "AVG",
+        "变体题",
+        "条件聚合"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q031",
+      "seq": 31,
+      "title": "各月出勤率：两种算法差多少",
+      "subject": "考勤",
+      "level": 3,
+      "knowledge_point": "口径陷阱：比率的简单平均 vs 天数加权",
+      "secondary_points": [
+        "AVG(比率) 与 SUM/SUM",
+        "ROUND",
+        "100.0 强制浮点"
+      ],
+      "stem": "老板要“月度出勤率”。两位同事各算了一版，数字略有出入：一个把每人的出勤率先算出来再取平均（人权重相等），一个用当月实出勤合计÷应出勤合计（按天数加权）。哪个对，取决于口径。",
+      "requirement": "按考勤期间(AttMonth)输出两种出勤率(%)：口径A＝当月各记录出勤率的简单平均；口径B＝当月实出勤合计÷应出勤合计×100。均保留 1 位小数，按月份升序。",
+      "output_hint": "三列：月份、简单平均出勤率、加权出勤率；共 12 行；注意个别月份两者会差 0.1。",
+      "hint": "口径A 用 AVG(ActualDays/WorkDays)；口径B 要先 SUM 再相除。前者每条记录等权，后者天数多的记录影响更大。",
+      "reference_sql": "SELECT AttMonth AS 月份,\n       ROUND(AVG(ActualDays / WorkDays) * 100, 1) AS 简单平均出勤率,\n       ROUND(100.0 * SUM(ActualDays) / SUM(WorkDays), 1) AS 加权出勤率\nFROM dbo.HR_ATTENDANCE\nGROUP BY AttMonth\nORDER BY AttMonth;",
+      "reference_sql_sqlite": "SELECT AttMonth AS 月份,\n       ROUND(AVG(ActualDays / WorkDays) * 100, 1) AS 简单平均出勤率,\n       ROUND(100.0 * SUM(ActualDays) / SUM(WorkDays), 1) AS 加权出勤率\nFROM HR_ATTENDANCE\nGROUP BY AttMonth\nORDER BY AttMonth;",
+      "expected": {
+        "columns": [
+          "月份",
+          "简单平均出勤率",
+          "加权出勤率"
+        ],
+        "row_count": 12,
+        "rows": [
+          [
+            "202507",
+            93.2,
+            93.2
+          ],
+          [
+            "202508",
+            94,
+            94
+          ],
+          [
+            "202509",
+            93.4,
+            93.4
+          ],
+          [
+            "202510",
+            94.1,
+            94.2
+          ],
+          [
+            "202511",
+            93.8,
+            93.8
+          ],
+          [
+            "202512",
+            93.6,
+            93.6
+          ],
+          [
+            "202601",
+            93.2,
+            93.2
+          ],
+          [
+            "202602",
+            93,
+            93
+          ],
+          [
+            "202603",
+            93.2,
+            93.2
+          ],
+          [
+            "202604",
+            94.4,
+            94.5
+          ],
+          [
+            "202605",
+            93.9,
+            93.9
+          ],
+          [
+            "202606",
+            92.9,
+            92.8
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "用 100*AVG(…)：整数与浮点混算会踩整除，应写 100.0*…。",
+        "混用两种口径却不自知：202510、202604、202606 三个月两口径差 0.1，报表必须二选一并对齐说明。",
+        "写成 AVG(ActualDays)/AVG(WorkDays)：这是“平均的商再相除”，既不是简单平均也不是加权，口径更乱。",
+        "把 WorkDays 当固定值不参与加权：忽略了个体应出勤天数的差异。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎一致（除数为 0 时均会报错/返回 NULL，本例分母恒正）。",
+      "tags": [
+        "口径陷阱",
+        "简单平均",
+        "加权平均",
+        "出勤率",
+        "ROUND"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q032",
+      "seq": 32,
+      "title": "“有迟到的人”两种口径差几个人",
+      "subject": "考勤",
+      "level": 3,
+      "knowledge_point": "口径陷阱：NULL 与 0 的计数差异",
+      "secondary_points": [
+        "COUNT(DISTINCT CASE WHEN …)",
+        "三值逻辑",
+        "人数而非人次"
+      ],
+      "stem": "员工关系要一份“本年度有迟到的人”名单规模。考勤表里迟到次数写成 NULL 表示当月没有迟到，另外还有一批显式写成 0。有人按“迟到次数非空”数人，有人按“迟到次数>0”数人，两个口径对不上。",
+      "requirement": "用一次查询输出两个口径的人数及差额：口径A＝在考勤表里存在“迟到次数非空”记录的人数；口径B＝存在“迟到次数>0”记录的人数。三列并排。",
+      "output_hint": "三列：非空口径人数、有迟到人数、相差人数；一行；正确值 200、199、1。",
+      "hint": "两个口径都要“按人去重”计数，可以用 COUNT(DISTINCT CASE WHEN 条件 THEN EmpNo END) 把条件写进聚合表达式里。",
+      "reference_sql": "SELECT COUNT(DISTINCT CASE WHEN LateCount IS NOT NULL THEN EmpNo END) AS 非空口径人数,\n       COUNT(DISTINCT CASE WHEN LateCount > 0        THEN EmpNo END) AS 有迟到人数,\n       COUNT(DISTINCT CASE WHEN LateCount IS NOT NULL THEN EmpNo END)\n     - COUNT(DISTINCT CASE WHEN LateCount > 0        THEN EmpNo END) AS 相差人数\nFROM dbo.HR_ATTENDANCE;",
+      "reference_sql_sqlite": "SELECT COUNT(DISTINCT CASE WHEN LateCount IS NOT NULL THEN EmpNo END) AS 非空口径人数,\n       COUNT(DISTINCT CASE WHEN LateCount > 0        THEN EmpNo END) AS 有迟到人数,\n       COUNT(DISTINCT CASE WHEN LateCount IS NOT NULL THEN EmpNo END)\n     - COUNT(DISTINCT CASE WHEN LateCount > 0        THEN EmpNo END) AS 相差人数\nFROM HR_ATTENDANCE;",
+      "expected": {
+        "columns": [
+          "非空口径人数",
+          "有迟到人数",
+          "相差人数"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            200,
+            199,
+            1
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "把 0 和 NULL 当同一回事：NULL 与 0 都表示“当月无迟到”，但“非空”口径会把显式 0 也算进来，人数偏大（200 对 199）。",
+        "用 COUNT(*) 或 COUNT(LateCount) 数记录而不是数人：得到的是“人次”，不是“人数”。",
+        "判断“有迟到”用 LateCount <> 0：NULL <> 0 结果为“未知”，会把空记录误判；正确写法是 > 0。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "两引擎三值逻辑一致；COUNT(DISTINCT CASE WHEN …) 两引擎均支持。",
+      "tags": [
+        "口径陷阱",
+        "NULL vs 0",
+        "三值逻辑",
+        "COUNT DISTINCT",
+        "考勤"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
+    },
+    {
+      "id": "q033",
+      "seq": 33,
+      "title": "薪酬分档：各档人数与档均",
+      "subject": "薪酬",
+      "level": 3,
+      "knowledge_point": "CASE WHEN 分桶聚合",
+      "secondary_points": [
+        "CASE WHEN 定义区间",
+        "左闭右开",
+        "GROUP BY 表达式",
+        "ROUND"
+      ],
+      "stem": "薪酬看板想按“实发工资区间”看分布：1 万以下、1–1.5 万、1.5–2 万、2 万及以上各有多少条记录、平均又是多少。有人用多个 SELECT 分别查区间，改一次边界要动四处。",
+      "requirement": "用 CASE WHEN 把实发工资(NetPay)分成四档并对记录数与档内平均实发（保留 2 位）汇总；档的边界：<10000、[10000,15000)、[15000,20000)、≥20000。",
+      "output_hint": "三列：档位、记录数、档内平均；按档位升序；共 4 行。",
+      "hint": "分档用一个 CASE WHEN 表达式定义，把这个表达式直接放进 GROUP BY（而不是引用别名），区间用 < 写成左闭右开，边界清晰、不重不漏。",
+      "reference_sql": "SELECT CASE WHEN NetPay < 10000 THEN 'A 1万以下'\n            WHEN NetPay < 15000 THEN 'B 1万-1.5万'\n            WHEN NetPay < 20000 THEN 'C 1.5万-2万'\n            ELSE 'D 2万及以上' END AS 档位,\n       COUNT(*) AS 记录数,\n       ROUND(AVG(NetPay), 2) AS 档内平均\nFROM dbo.HR_SALARY\nGROUP BY CASE WHEN NetPay < 10000 THEN 'A 1万以下'\n              WHEN NetPay < 15000 THEN 'B 1万-1.5万'\n              WHEN NetPay < 20000 THEN 'C 1.5万-2万'\n              ELSE 'D 2万及以上' END\nORDER BY 档位;",
+      "reference_sql_sqlite": "SELECT CASE WHEN NetPay < 10000 THEN 'A 1万以下'\n            WHEN NetPay < 15000 THEN 'B 1万-1.5万'\n            WHEN NetPay < 20000 THEN 'C 1.5万-2万'\n            ELSE 'D 2万及以上' END AS 档位,\n       COUNT(*) AS 记录数,\n       ROUND(AVG(NetPay), 2) AS 档内平均\nFROM HR_SALARY\nGROUP BY CASE WHEN NetPay < 10000 THEN 'A 1万以下'\n              WHEN NetPay < 15000 THEN 'B 1万-1.5万'\n              WHEN NetPay < 20000 THEN 'C 1.5万-2万'\n              ELSE 'D 2万及以上' END\nORDER BY 档位;",
+      "expected": {
+        "columns": [
+          "档位",
+          "记录数",
+          "档内平均"
+        ],
+        "row_count": 4,
+        "rows": [
+          [
+            "A 1万以下",
+            743,
+            6650.41
+          ],
+          [
+            "B 1万-1.5万",
+            87,
+            13441.41
+          ],
+          [
+            "C 1.5万-2万",
+            663,
+            17438.37
+          ],
+          [
+            "D 2万及以上",
+            375,
+            21512.59
+          ]
+        ],
+        "order_sensitive": false
+      },
+      "pitfalls": [
+        "GROUP BY 里引用 SELECT 的列别名：SQLite 允许，但 SQL Server 不允许，必须把整段 CASE 表达式重复一遍。",
+        "边界用 <= 与 < 混搭：容易让边界值落两档或漏档；统一用 < 保证左闭右开、不重不漏。",
+        "忽略币种：库里含 USD/INR，其 NetPay 会被按人民币档位硬切；若业务只看本币，需另加 CurrencyCode 过滤。",
+        "漏写 ELSE：超出所有 WHEN 的行会落进 NULL 档，容易被忽略而漏计。"
+      ],
+      "forbidden_syntax": [
+        "CONVERT",
+        "PIVOT",
+        "UNPIVOT",
+        "MERGE",
+        "TOP n PERCENT",
+        "存储过程",
+        "触发器",
+        "游标",
+        "临时表 #temp",
+        "GO"
+      ],
+      "dialect_note": "GROUP BY 分档表达式：SQL Server 不接受 SELECT 别名，SQLite 两者皆可——写通用版要重复 CASE；AVG/ROUND 两引擎一致。",
+      "tags": [
+        "CASE WHEN",
+        "分桶",
+        "分档聚合",
+        "GROUP BY 表达式",
+        "为段3预热"
+      ],
+      "status": "ready",
+      "version": "1.0",
+      "updated_at": "2026-10-10"
     }
   ]
 }
