@@ -5,7 +5,7 @@
   "description": "Offline single-file SQL practice bench for HR-domain SQLite exercises (no backend, no dependencies).",
   "license": "MIT",
   "scripts": {
-    "test": "node --test test/judge.test.mjs test/quest.test.mjs test/tables.test.mjs test/db.test.mjs",
+    "test": "node --test test/judge.test.mjs test/quest.test.mjs test/sections.test.mjs test/tables.test.mjs test/db.test.mjs",
     "build": "node build.mjs"
   }
 }

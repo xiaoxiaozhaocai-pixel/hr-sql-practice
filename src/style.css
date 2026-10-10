@@ -198,6 +198,18 @@ button { font: inherit; cursor: pointer; }
 .q-dict-hints .dh-val { display: inline-block; margin-right: 8px; }
 .q-dict-hints .dh-code { font-weight: 600; color: var(--ink); }
 
+/* 题面常驻标签行（考点 / 次要考点 / 标签）与语法卡：与题面同层，不参与折叠 */
+.q-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+.q-tags .tag { font-size: 12px; line-height: 1.6; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); background: var(--neutral-tint); }
+.q-tags .tag-main { font-weight: 600; color: var(--ink); }
+.q-tags .tag-soft { color: var(--ink-3); }
+.q-syntax { margin: 16px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.q-syntax[hidden] { display: none; }
+.q-syntax .syntax-card { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--neutral-tint); }
+.q-syntax .syntax-name { font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.q-syntax .syntax-row { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+.q-syntax .syntax-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); white-space: pre-wrap; }
+
 /* 任务描述 */
 .task { margin-top: 16px; font-size: 14px; line-height: 1.5; color: var(--ink); }
 .stem { font-weight: 600; }

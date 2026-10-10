@@ -26,30 +26,33 @@ function memStorage(seed) {
   };
 }
 
-test('sections_partition_question_bank_into_4_with_counts_5_16_10_2', () => {
+test('sections_partition_question_bank_into_6_with_counts_20_20_20_18_21_21', () => {
   const sections = L.buildSections(QUESTIONS);
-  assert.equal(sections.length, 4, '题库必须正好分成 4 段');
-  assert.deepEqual(sections.map((s) => s.level), [1, 2, 3, 4], '段按 level 升序');
-  assert.deepEqual(sections.map((s) => s.questions.length), [5, 16, 10, 2], '各段关数 5/16/10/2');
+  assert.equal(sections.length, 6, '题库必须正好分成 6 段');
+  assert.deepEqual(sections.map((s) => s.section), [1, 2, 3, 4, 5, 6], '段按 section 升序');
+  assert.deepEqual(sections.map((s) => s.questions.length), [20, 20, 20, 18, 21, 21], '各段关数 20/20/20/18/21/21');
   assert.deepEqual(
     sections.map((s) => s.title),
-    ['入门 · 单表查询', '进阶 · 分组与多表', '实战 · 子查询与口径', '挑战 · 视图与递归']
+    ['入门 · 单表查询', '进阶 · 分组与多表', '实战 · 子查询与口径',
+      '挑战 · 时点与进阶', '综合 · 报表与汇总', '时点 · 历史与口径']
   );
   for (const s of sections) {
     const seqs = s.questions.map((q) => q.seq);
     const sorted = seqs.slice().sort((a, b) => a - b);
-    assert.deepEqual(seqs, sorted, `第 ${s.level} 段段内必须按 seq 升序`);
-    for (const q of s.questions) assert.equal(q.level, s.level);
+    assert.deepEqual(seqs, sorted, `第 ${s.section} 段段内必须按 seq 升序`);
+    for (const q of s.questions) assert.equal(q.section, s.section);
   }
   const allIds = sections.flatMap((s) => s.questions.map((q) => q.id));
   assert.equal(allIds.length, QUESTIONS.length, '编排结果必须覆盖题库全部题目');
   assert.equal(new Set(allIds).size, QUESTIONS.length, '关卡不重不漏');
 });
 
-test('question_bank_has_33_questions_with_contiguous_seq_1_to_33', () => {
-  assert.equal(QUESTIONS.length, 33, '题库必须为 33 题');
+test('question_bank_has_120_questions_with_contiguous_seq_1_to_120', () => {
+  assert.equal(QUESTIONS.length, 120, '题库必须为 120 题');
   const seqs = QUESTIONS.map((q) => q.seq).sort((a, b) => a - b);
-  assert.deepEqual(seqs, Array.from({ length: 33 }, (_, i) => i + 1), 'seq 必须连续 1..33');
+  assert.deepEqual(seqs, Array.from({ length: 120 }, (_, i) => i + 1), 'seq 必须连续 1..120');
+  const ids = QUESTIONS.map((q) => q.id).sort();
+  assert.deepEqual(ids, Array.from({ length: 120 }, (_, i) => 'q' + String(i + 1).padStart(3, '0')), 'id 必须连续无缺无重');
 });
 
 test('wrong_answer_loses_heart_and_records_wrong_book', () => {

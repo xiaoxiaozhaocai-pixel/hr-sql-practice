@@ -26,7 +26,7 @@
   }
 
   /* 单次查询最多返回的行数：超过即截断并在结果里置 truncated=true。
-     取值理由：题库 33 题 expected.row_count 最大 200（HR_EMPLOYEE 全表），
+     取值理由：题库 120 题 expected.row_count 最大 200（HR_EMPLOYEE 全表），
      1000 给 5 倍余量，既不误伤任何题的参考答案，又能挡住
      `SELECT * FROM HR_SALARY a, HR_SALARY b` 这类笛卡尔积把结果全物化进内存。 */
   var MAX_ROWS = 1000;

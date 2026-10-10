@@ -25,6 +25,7 @@
   }
 
   var SECTIONS = L ? L.buildSections(QUESTIONS) : [];
+  var SYNTAX_BY_ID = L ? L.syntaxIntrosFor(QUESTIONS) : {};   // id -> 首现语法卡
   var QUESTION_BY_ID = {};
   var SECTION_OF = {};   // 题目 id -> 段
   SECTIONS.forEach(function (sec) {
@@ -148,7 +149,7 @@
     var stage = $('stat-stage');
     if (sec && stage) {
       var done = passedInSection(sec);
-      stage.textContent = '第 ' + sec.level + ' 段 · 已完成 ' + done + '/' + sec.questions.length;
+      stage.textContent = '第 ' + sec.section + ' 段 · 已完成 ' + done + '/' + sec.questions.length;
     }
     var bar = $('stat-bar');
     if (bar && sec) {
@@ -193,10 +194,10 @@
 
     SECTIONS.forEach(function (sec) {
       var qs = sec.questions.filter(questionMatches);
-      var isActive = activeSec && activeSec.level === sec.level;
+      var isActive = activeSec && activeSec.section === sec.section;
 
       var head = el('div', null, 'group-head' + (isActive ? ' on' : ''));
-      head.appendChild(el('span', '第 ' + sec.level + ' 段 · ' + sec.title, 'group-title'));
+      head.appendChild(el('span', '第 ' + sec.section + ' 段 · ' + sec.title, 'group-title'));
       head.appendChild(el('span', passedInSection(sec) + '/' + sec.questions.length, 'group-count'));
       nav.appendChild(head);
 
@@ -409,6 +410,50 @@
     return uniq;
   }
 
+  /* 题面常驻标签行：考点 / 次要考点 / 标签。与题面同层，不放进任何折叠容器。 */
+  function renderTags(q) {
+    var host = $('q-tags');
+    if (!host) return;
+    host.textContent = '';
+    if (!q) return;
+    var kp = String(q.knowledge_point || '').trim();
+    if (kp) host.appendChild(el('span', '考点 ' + kp, 'tag tag-main'));
+    (Array.isArray(q.secondary_points) ? q.secondary_points : []).forEach(function (p) {
+      p = String(p === null || p === undefined ? '' : p).trim();
+      if (p) host.appendChild(el('span', '次要 ' + p, 'tag'));
+    });
+    (Array.isArray(q.tags) ? q.tags : []).forEach(function (t) {
+      t = String(t === null || t === undefined ? '' : t).trim();
+      if (t) host.appendChild(el('span', '#' + t, 'tag tag-soft'));
+    });
+  }
+
+  /* syntax_intro 首现卡片：SYNTAX_BY_ID 已按 section→seq 扫好，只渲染首现项；
+     无有效卡片时整块隐藏（不出现空壳）。与题面同层，不放进任何折叠容器。 */
+  function renderSyntaxCards(q) {
+    var host = $('q-syntax');
+    if (!host) return;
+    host.textContent = '';
+    host.hidden = true;
+    var cards = q ? SYNTAX_BY_ID[q.id] : null;
+    if (!cards || !cards.length) return;
+    cards.forEach(function (c) {
+      var card = el('div', null, 'syntax-card');
+      card.appendChild(el('div', c.syntax, 'syntax-name'));
+      var body = el('div', null, 'syntax-body');
+      [['说明', c.what, ''], ['何时用', c.when, ''], ['示例', c.example, 'syntax-code'], ['常见误用', c.misuse, '']]
+        .forEach(function (pair) {
+          var row = el('div', null, 'syntax-row');
+          row.appendChild(el('b', pair[0] + '：'));
+          row.appendChild(el('span', pair[1], pair[2]));
+          body.appendChild(row);
+        });
+      card.appendChild(body);
+      host.appendChild(card);
+    });
+    host.hidden = false;
+  }
+
   function renderDictHints(q) {
     var host = $('q-dict-hints');
     if (!host) return;
@@ -529,7 +574,10 @@
 
     $('q-title').textContent = '#' + pad2(q.seq) + ' ' + (q.title || q.id);
     var lv = $('q-level');
-    if (lv) lv.textContent = '难度 L' + q.level;
+    if (lv) {
+      var sec = SECTION_OF[q.id];
+      lv.textContent = sec ? ('段' + sec.section + ' · ' + sec.title) : '难度 L' + q.level;
+    }
 
     /* 题面 meta 行：压成一行 12px 灰字；与考点/业务域重复的标签删掉。 */
     var meta = $('q-meta');
@@ -545,6 +593,7 @@
     });
     if (uniq.length) parts.push('标签 ' + uniq.join(' / '));
     parts.forEach(function (t) { meta.appendChild(el('span', t)); });
+    renderTags(q);
 
     var principle = $('q-principle');
     principle.textContent = '';
@@ -567,6 +616,7 @@
     if (thead) thead.setAttribute('aria-expanded', 'false');
     renderQuestionTables(q);
     renderDictHints(q);
+    renderSyntaxCards(q);
 
     var sqlInput = $('sql-input');
     sqlInput.value = state.sql[q.id] || '';
@@ -597,7 +647,7 @@
     if (badge) {
       var sec = SECTION_OF[q.id];
       var all = sec && sec.questions.every(function (x) { return state.passed[x.id]; });
-      if (all) { badge.textContent = '第 ' + sec.level + ' 段通关'; show(badge, true); }
+      if (all) { badge.textContent = '第 ' + sec.section + ' 段通关'; show(badge, true); }
       else show(badge, false);
     }
   }

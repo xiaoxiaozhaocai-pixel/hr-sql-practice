@@ -156,7 +156,7 @@ test('question_tables_falls_back_to_reference_sql_and_handles_empty', () => {
 
 test('question_tables_derived_from_sql_for_all_questions', () => {
   const known = new Set([...HRTables.allTables().map((t) => t.name), ...HRTables.allViews().map((v) => v.name)]);
-  assert.equal(PACK.questions.length, 33, '题库扩容后应为 33 题');
+  assert.equal(PACK.questions.length, 120, '题库扩容后应为 120 题');
   for (const q of PACK.questions) {
     const tables = HRTables.questionTables(q);
     assert.ok(tables.length > 0, `${q.id} 参考 SQL 必须解析出至少一张表`);

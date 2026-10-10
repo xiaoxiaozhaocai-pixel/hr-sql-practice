@@ -30,35 +30,81 @@
   var HEARTS_PER_LEVEL = 3;
   var XP_PER_LEVEL = 10;
 
-  /* 段标题：33 题按 level 字段天然分成 4 段（5 / 16 / 10 / 2 关）。
-     这里只登记标题；段的成员完全由题目 level 决定，新增题目无需改这张表。 */
+  /* 段标题：段位（section）与难度档（level）是两根独立的轴。
+     section 由题库显式字段决定（1–6，回填口径见 test/sections.test.mjs 的区间表），
+     level 继续保留为 1–4 的难度档，两者互不影响。这里只登记标题。 */
   var SECTION_TITLES = {
     1: '入门 · 单表查询',
     2: '进阶 · 分组与多表',
     3: '实战 · 子查询与口径',
-    4: '挑战 · 视图与递归'
+    4: '挑战 · 时点与进阶',
+    5: '综合 · 报表与汇总',
+    6: '时点 · 历史与口径'
   };
 
   /**
-   * 把题目编排成段：section = { level, title, questions[] }。
-   * 段内严格按 seq 升序 —— 题库作者已排好循序渐进的坡度，编排层不得重排。
+   * 把题目按 section 编排成段：section = { section, title, questions[] }。
+   * 段序按 section 升序；段内严格按 seq 升序 —— 题库作者已排好循序渐进的坡度，编排层不得重排。
+   * section 缺省 / 非数字的题目直接跳过（不崩），与旧版对 level 缺省的处理口径一致。
    */
   function buildSections(questions, titles) {
     titles = titles || SECTION_TITLES;
-    var byLevel = {};
+    var bySection = {};
     (questions || []).forEach(function (q) {
-      if (!q || q.level === undefined || q.level === null) return;
-      var lv = Number(q.level);
-      if (!byLevel[lv]) byLevel[lv] = [];
-      byLevel[lv].push(q);
+      if (!q || q.section === undefined || q.section === null) return;
+      var sec = Number(q.section);
+      if (!isFinite(sec)) return;
+      if (!bySection[sec]) bySection[sec] = [];
+      bySection[sec].push(q);
     });
-    return Object.keys(byLevel)
+    return Object.keys(bySection)
       .map(Number)
       .sort(function (a, b) { return a - b; })
-      .map(function (lv) {
-        var qs = byLevel[lv].slice().sort(function (a, b) { return (a.seq || 0) - (b.seq || 0); });
-        return { level: lv, title: titles[lv] || ('第 ' + lv + ' 段'), questions: qs };
+      .map(function (sec) {
+        var qs = bySection[sec].slice().sort(function (a, b) { return (a.seq || 0) - (b.seq || 0); });
+        return { section: sec, title: titles[sec] || ('第 ' + sec + ' 段'), questions: qs };
       });
+  }
+
+  /* 单条语法卡是否「有效」：必须是对象，且 syntax / what / when / example / misuse 五字段
+     都是非空字符串。缺字段、空数组、元素不完整 —— 一律不渲染（与 expected_note 同款口径）。 */
+  function validSyntaxItem(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    var out = {};
+    var keys = ['syntax', 'what', 'when', 'example', 'misuse'];
+    for (var i = 0; i < keys.length; i++) {
+      var v = item[keys[i]];
+      if (typeof v !== 'string' || !v.trim()) return null;
+      out[keys[i]] = v.trim();
+    }
+    return out;
+  }
+
+  /**
+   * syntax_intro 首现判定：按 section 升序 → seq 升序扫题库（复用 buildSections 的段序/段内序），
+   * 某个 syntax 第一次出现的那道题才返回卡片；同题多语法各自成卡，跨段重复不再返回。
+   * @returns {Object} 题目 id -> 有效卡片数组（只含首现项）
+   */
+  function syntaxIntrosFor(questions, titles) {
+    var sections = buildSections(questions, titles);
+    var seen = {};
+    var byId = {};
+    sections.forEach(function (sec) {
+      sec.questions.forEach(function (q) {
+        if (!q || !Array.isArray(q.syntax_intro)) return;
+        var cards = [];
+        q.syntax_intro.forEach(function (raw) {
+          var item = validSyntaxItem(raw);
+          if (!item) return;
+          var key = item.syntax.toLowerCase();
+          if (seen[key]) return;
+          seen[key] = true;
+          cards.push(item);
+        });
+        if (cards.length) byId[q.id] = cards;
+      });
+    });
+    return byId;
   }
 
   /**
@@ -208,6 +254,8 @@
     XP_PER_LEVEL: XP_PER_LEVEL,
     SECTION_TITLES: SECTION_TITLES,
     buildSections: buildSections,
+    validSyntaxItem: validSyntaxItem,
+    syntaxIntrosFor: syntaxIntrosFor,
     hintList: hintList,
     freshState: freshState,
     normalizeState: normalizeState,
