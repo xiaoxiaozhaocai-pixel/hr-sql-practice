@@ -18,10 +18,11 @@
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
   var L = window.HRLevels;
   var T = window.HRTables;
-  var MODEL_NOTES = BOOT.modelNotes || null;
 
-  /* 题 seq -> 涉及的表名（唯一权威源：docs/model-notes-v1.json 的 questions[].tables） */
-  var TABLE_MAP = (T && MODEL_NOTES) ? T.questionTableMap(MODEL_NOTES.questions) : {};
+  /* 题 seq -> 真实用表：由 src/tables.js 从参考 SQL 解析（不再读 model-notes 的人工映射）。 */
+  function tablesOf(q) {
+    return (T && q) ? T.questionTables(q) : [];
+  }
 
   var SECTIONS = L ? L.buildSections(QUESTIONS) : [];
   var QUESTION_BY_ID = {};
@@ -120,7 +121,7 @@
     var up = s.toUpperCase().replace(/\s+/g, ' ').trim();
     if (!up) return null;
     var q = currentQuestion();
-    var names = (q && TABLE_MAP[q.seq]) || [];
+    var names = tablesOf(q);
     var tableHint = names.length ? names.join(' / ') : '见上方「涉及的表 / 字段」';
     if (up.indexOf('FROM') === -1) {
       return '缺少 FROM 子句：SELECT 的字段来自哪张表？本题的表是 ' + tableHint +
@@ -344,8 +345,8 @@
     var block = $('tables-toggle');
     var box = $('q-tables');
     if (!block || !box) return;
-    if (!T || !MODEL_NOTES) { show(block, false); return; }
-    var names = TABLE_MAP[q.seq] || [];
+    if (!T) { show(block, false); return; }
+    var names = tablesOf(q);
     if (!names.length) { show(block, false); return; }
     box.textContent = '';
     names.forEach(function (n) { box.appendChild(tableChip(n, [], false)); });
@@ -881,7 +882,7 @@
     var namesInText = T.allTables().map(function (t) { return t.name; })
       .filter(function (n) { return upperText.indexOf(n) !== -1; });
     var q = currentQuestion();
-    if (!namesInText.length && q) namesInText = TABLE_MAP[q.seq] || [];
+    if (!namesInText.length && q) namesInText = tablesOf(q);
     namesInText.forEach(function (n) {
       T.fieldNames(n).forEach(function (f) {
         if (f.toUpperCase().indexOf(prefix) === 0) push(f, n, f);

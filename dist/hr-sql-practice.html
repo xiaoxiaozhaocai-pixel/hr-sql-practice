@@ -1526,6 +1526,33 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return out;
   }
 
+  /* 白名单：本模块已登记的表 + 视图（全大写），用于排除 CTE 名 / 别名 / 子查询伪表名。 */
+  var KNOWN_NAMES = TABLES.map(function (t) { return t.name.toUpperCase(); })
+    .concat(VIEWS.map(function (v) { return v.name.toUpperCase(); }));
+
+  /* 题目的真实用表：从参考 SQL 解析 FROM / JOIN 后的标识符，再按白名单过滤。
+     数据源 = 题目自带的参考 SQL，不再依赖 model-notes 的人工登记。
+     返回按首次出现顺序去重的表/视图名数组；解析为空即返回 []。 */
+  function questionTables(q) {
+    if (!q || typeof q !== 'object') return [];
+    var sql = q.reference_sql_sqlite || q.reference_sql || '';
+    if (!sql) return [];
+    var s = String(sql)
+      .replace(/--[^\n]*/g, ' ')          /* 剥行注释 */
+      .replace(/\/\*[\s\S]*?\*\//g, ' '); /* 剥块注释 */
+    var ident = /\b(?:FROM|JOIN)\s+([A-Za-z_\[][A-Za-z0-9_.\[\]]*)/gi;
+    var out = [];
+    var m;
+    while ((m = ident.exec(s)) !== null) {
+      var raw = m[1].replace(/[\[\]]/g, '');       /* 去方括号 */
+      var parts = raw.split('.');
+      var name = parts[parts.length - 1].trim().toUpperCase(); /* 去 dbo. 前缀并转大写 */
+      if (KNOWN_NAMES.indexOf(name) === -1) continue;          /* 白名单过滤 */
+      if (out.indexOf(name) === -1) out.push(name);            /* 去重，保留首次出现顺序 */
+    }
+    return out;
+  }
+
   /* 题目 seq -> 表名列表。数据源 = docs/model-notes-v1.json 的 questions[]（id 即 seq）。 */
   function questionTableMap(modelQuestions) {
     var map = {};
@@ -1551,7 +1578,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     fieldCount: fieldCount,
     searchTables: searchTables,
     questionTableMap: questionTableMap,
-    tablesForSeq: tablesForSeq
+    tablesForSeq: tablesForSeq,
+    questionTables: questionTables
   };
 });
 
@@ -1668,10 +1696,11 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
   var L = window.HRLevels;
   var T = window.HRTables;
-  var MODEL_NOTES = BOOT.modelNotes || null;
 
-  /* 题 seq -> 涉及的表名（唯一权威源：docs/model-notes-v1.json 的 questions[].tables） */
-  var TABLE_MAP = (T && MODEL_NOTES) ? T.questionTableMap(MODEL_NOTES.questions) : {};
+  /* 题 seq -> 真实用表：由 src/tables.js 从参考 SQL 解析（不再读 model-notes 的人工映射）。 */
+  function tablesOf(q) {
+    return (T && q) ? T.questionTables(q) : [];
+  }
 
   var SECTIONS = L ? L.buildSections(QUESTIONS) : [];
   var QUESTION_BY_ID = {};
@@ -1770,7 +1799,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var up = s.toUpperCase().replace(/\s+/g, ' ').trim();
     if (!up) return null;
     var q = currentQuestion();
-    var names = (q && TABLE_MAP[q.seq]) || [];
+    var names = tablesOf(q);
     var tableHint = names.length ? names.join(' / ') : '见上方「涉及的表 / 字段」';
     if (up.indexOf('FROM') === -1) {
       return '缺少 FROM 子句：SELECT 的字段来自哪张表？本题的表是 ' + tableHint +
@@ -1994,8 +2023,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var block = $('tables-toggle');
     var box = $('q-tables');
     if (!block || !box) return;
-    if (!T || !MODEL_NOTES) { show(block, false); return; }
-    var names = TABLE_MAP[q.seq] || [];
+    if (!T) { show(block, false); return; }
+    var names = tablesOf(q);
     if (!names.length) { show(block, false); return; }
     box.textContent = '';
     names.forEach(function (n) { box.appendChild(tableChip(n, [], false)); });
@@ -2531,7 +2560,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var namesInText = T.allTables().map(function (t) { return t.name; })
       .filter(function (n) { return upperText.indexOf(n) !== -1; });
     var q = currentQuestion();
-    if (!namesInText.length && q) namesInText = TABLE_MAP[q.seq] || [];
+    if (!namesInText.length && q) namesInText = tablesOf(q);
     namesInText.forEach(function (n) {
       T.fieldNames(n).forEach(function (f) {
         if (f.toUpperCase().indexOf(prefix) === 0) push(f, n, f);

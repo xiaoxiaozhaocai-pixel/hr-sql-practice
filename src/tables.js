@@ -266,6 +266,33 @@
     return out;
   }
 
+  /* 白名单：本模块已登记的表 + 视图（全大写），用于排除 CTE 名 / 别名 / 子查询伪表名。 */
+  var KNOWN_NAMES = TABLES.map(function (t) { return t.name.toUpperCase(); })
+    .concat(VIEWS.map(function (v) { return v.name.toUpperCase(); }));
+
+  /* 题目的真实用表：从参考 SQL 解析 FROM / JOIN 后的标识符，再按白名单过滤。
+     数据源 = 题目自带的参考 SQL，不再依赖 model-notes 的人工登记。
+     返回按首次出现顺序去重的表/视图名数组；解析为空即返回 []。 */
+  function questionTables(q) {
+    if (!q || typeof q !== 'object') return [];
+    var sql = q.reference_sql_sqlite || q.reference_sql || '';
+    if (!sql) return [];
+    var s = String(sql)
+      .replace(/--[^\n]*/g, ' ')          /* 剥行注释 */
+      .replace(/\/\*[\s\S]*?\*\//g, ' '); /* 剥块注释 */
+    var ident = /\b(?:FROM|JOIN)\s+([A-Za-z_\[][A-Za-z0-9_.\[\]]*)/gi;
+    var out = [];
+    var m;
+    while ((m = ident.exec(s)) !== null) {
+      var raw = m[1].replace(/[\[\]]/g, '');       /* 去方括号 */
+      var parts = raw.split('.');
+      var name = parts[parts.length - 1].trim().toUpperCase(); /* 去 dbo. 前缀并转大写 */
+      if (KNOWN_NAMES.indexOf(name) === -1) continue;          /* 白名单过滤 */
+      if (out.indexOf(name) === -1) out.push(name);            /* 去重，保留首次出现顺序 */
+    }
+    return out;
+  }
+
   /* 题目 seq -> 表名列表。数据源 = docs/model-notes-v1.json 的 questions[]（id 即 seq）。 */
   function questionTableMap(modelQuestions) {
     var map = {};
@@ -291,6 +318,7 @@
     fieldCount: fieldCount,
     searchTables: searchTables,
     questionTableMap: questionTableMap,
-    tablesForSeq: tablesForSeq
+    tablesForSeq: tablesForSeq,
+    questionTables: questionTables
   };
 });

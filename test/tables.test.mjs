@@ -129,6 +129,63 @@ test('structure_data_contains_no_data_rows', () => {
   assert.doesNotMatch(TABLES_SRC, /\brequire\s*\(/, 'src/tables.js 不得读文件 / 引依赖');
 });
 
+test('question_tables_parses_reference_sql_with_whitelist_and_order', () => {
+  const tables = HRTables.questionTables({
+    reference_sql_sqlite: [
+      '-- 注释里的 HR_SALARY 不算数',
+      'SELECT a.ID /* HR_DICT 也是 */',
+      'FROM [HR_ASSIGNMENT] a',
+      'JOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo',
+      'JOIN HR_ASSIGNMENT b ON b.ID = a.ID',
+      'LEFT JOIN (SELECT * FROM HR_SALARY) s ON s.EmpNo = e.EmpNo',
+      'JOIN some_cte c ON c.ID = a.ID'
+    ].join('\n')
+  });
+  /* 注释不参与；白名单过滤 some_cte；去重并保留首次出现顺序 */
+  assert.deepEqual(tables, ['HR_ASSIGNMENT', 'HR_EMPLOYEE', 'HR_SALARY']);
+});
+
+test('question_tables_falls_back_to_reference_sql_and_handles_empty', () => {
+  assert.deepEqual(HRTables.questionTables({ reference_sql: 'SELECT * FROM HR_JOB' }), ['HR_JOB']);
+  assert.deepEqual(HRTables.questionTables({ reference_sql_sqlite: 'SELECT 1' }), [], '无 FROM 时返回空数组');
+  assert.deepEqual(HRTables.questionTables(null), []);
+});
+
+test('question_tables_derived_from_sql_for_all_questions', () => {
+  const known = new Set([...HRTables.allTables().map((t) => t.name), ...HRTables.allViews().map((v) => v.name)]);
+  assert.equal(PACK.questions.length, 33, '题库扩容后应为 33 题');
+  for (const q of PACK.questions) {
+    const tables = HRTables.questionTables(q);
+    assert.ok(tables.length > 0, `${q.id} 参考 SQL 必须解析出至少一张表`);
+    for (const name of tables) assert.ok(known.has(name), `${q.id} 解析出白名单外的 ${name}`);
+  }
+  /* 曾被 model-notes 人工映射写错的 8 题 + 3 个视图题，一律以参考 SQL 实际用表为准 */
+  const expect = {
+    q007: ['HR_ASSIGNMENT', 'HR_EMPLOYEE'],
+    q008: ['HR_ASSIGNMENT', 'HR_ORG', 'HR_EMPLOYEE'],
+    q009: ['HR_ASSIGNMENT', 'HR_EMPLOYEE', 'HR_ORG'],
+    q011: ['HR_ATTENDANCE'],
+    q012: ['HR_PERFORMANCE'],
+    q014: ['HR_EMPLOYEE', 'HR_PERFORMANCE'],
+    q015: ['HR_ORG', 'HR_DICT'],
+    q016: ['HR_SALARY'],
+    q013: ['V_EMP_ASSIGNMENT'],
+    q019: ['V_ORG_HEADCOUNT'],
+    q020: ['V_ORG_TREE']
+  };
+  for (const [id, names] of Object.entries(expect)) {
+    const q = PACK.questions.find((x) => x.id === id);
+    assert.deepEqual(HRTables.questionTables(q), names, `${id} 用表应与参考 SQL 一致`);
+  }
+});
+
+test('app_js_derives_question_tables_from_sql_not_model_notes', () => {
+  const appSrc = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+  assert.doesNotMatch(appSrc, /TABLE_MAP/, 'app.js 不得再用 model-notes 的 TABLE_MAP');
+  assert.doesNotMatch(appSrc, /questionTableMap/, 'app.js 不得再用 questionTableMap');
+  assert.match(appSrc, /questionTables/, 'app.js 必须改用 SQL 解析的 questionTables');
+});
+
 test('search_matches_table_name_and_field_name', () => {
   const byTable = HRTables.searchTables('assignment');
   assert.equal(byTable.length, 1);
