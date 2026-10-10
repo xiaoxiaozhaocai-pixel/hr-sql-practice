@@ -1,7 +1,7 @@
 {
   "name": "hr-sql-practice",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
   "description": "Offline single-file SQL practice bench for HR-domain SQLite exercises (no backend, no dependencies).",
   "license": "MIT",
   "scripts": {
