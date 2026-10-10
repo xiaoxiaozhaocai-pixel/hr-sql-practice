@@ -326,6 +326,43 @@ pre {
 
 .foot { margin-top: 16px; padding: 24px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
 
+/* ---------------------------- 学习记录（顶栏指标收进这里） ---------------------------- */
+.record-panel {
+  position: sticky; top: 56px; z-index: 29; padding: 8px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.record-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.record-head b { margin-right: auto; }
+.record-grid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.record-panel .muted { margin-top: 8px; font-size: 12px; }
+
+.reset-confirm { margin: 8px 16px; }
+.reset-confirm .reset-actions { margin-top: 8px; display: flex; gap: 8px; }
+
+/* 仅读屏可见的播报区（提示展开 / 查看答案 / 结算） */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* 差异摘要 / 唯一动作 / 回看入口 */
+.diff-type { margin-top: 8px; font-weight: 600; }
+.verdict-action { margin-top: 8px; }
+.diff-more > summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.review-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.review-tools summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.review-tools ul { margin: 8px 0 0; padding-left: 20px; }
+
+/* 减弱动画：不是放慢，是把过渡 / 动画整体关掉 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ---------------------------- 窄屏：左栏收起，主列优先保宽 ---------------------------- */
 @media (max-width: 968px) {
   .layout { display: block; padding: 8px; }

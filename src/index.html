@@ -15,15 +15,36 @@
     <button id="btn-rail" type="button" class="btn ghost sm rail-btn" aria-controls="rail">题号</button>
     <span id="stat-stage" class="progress-text">第 1 段 · 已完成 0/5</span>
     <span class="bar"><i id="stat-bar"></i></span>
-    <span id="stat-xp" class="stat">XP 0</span>
-    <span id="stat-hearts" class="stat stat-hearts" title="本关剩余尝试次数"></span>
-    <span id="stat-streak" class="stat" title="连续一次就过"></span>
-    <span id="stat-goal" class="stat stat-goal">今日 0/3</span>
+    <button id="btn-record" type="button" class="btn ghost sm" aria-controls="record-panel" aria-expanded="false">学习记录</button>
     <button id="btn-tables-drawer" type="button" class="btn ghost sm">表结构</button>
     <button id="btn-dialect-drawer" type="button" class="btn ghost sm">方言对照</button>
     <button id="btn-reset" type="button" class="link-btn">重置全部进度</button>
   </div>
 </header>
+
+<div id="record-panel" class="record-panel" hidden="" role="region" aria-label="学习记录">
+  <div class="record-head">
+    <b>学习记录</b>
+    <button id="record-close" type="button" class="icon-btn" title="收起">收起</button>
+  </div>
+  <div class="record-grid">
+    <span id="stat-xp" class="stat">XP 0</span>
+    <span id="stat-streak" class="stat" title="有计分的日子才累计">连续 0 天</span>
+    <span id="stat-goal" class="stat stat-goal">今日 0/3</span>
+    <span id="stat-progress" class="stat">已完成 0 题 · 待复查 0 题</span>
+  </div>
+  <div id="record-persist" class="muted" hidden=""></div>
+</div>
+
+<div id="reset-confirm" class="reset-confirm card-note is-warn" hidden="">
+  <div>确定重置全部进度？通过记录 / 错题本 / 已写 SQL / 学习记录全部清空，不可撤销。</div>
+  <div class="reset-actions">
+    <button id="btn-reset-yes" type="button" class="btn dark sm">确认重置</button>
+    <button id="btn-reset-no" type="button" class="btn ghost sm">取消</button>
+  </div>
+</div>
+
+<div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="load-banner" class="banner" hidden=""></div>
 <div id="selfcheck-banner" class="banner banner-error" hidden=""></div>
@@ -62,7 +83,7 @@
         <div class="qhead">
           <h3 id="q-title"></h3>
           <span class="chip" id="q-level"></span>
-          <span class="level-hearts" id="q-hearts"></span>
+          <span class="level-hearts" id="q-attempts"></span>
         </div>
         <p class="metaline" id="q-meta"></p>
         <p class="q-tags" id="q-tags"></p>
@@ -119,7 +140,7 @@
           <span class="hint" id="run-hint"></span>
         </div>
 
-        <div id="verdict" class="card-note" hidden=""></div>
+        <div id="verdict" class="card-note" role="status" aria-live="polite" aria-atomic="true" hidden=""></div>
       </section>
 
       <section class="card" id="result-block" hidden="">

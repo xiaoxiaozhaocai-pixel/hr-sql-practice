@@ -94,6 +94,13 @@
     if (text) { node.textContent = text; node.hidden = false; } else { node.hidden = true; }
   }
 
+  /* 读屏播报：一个专用的 polite 区域，避免整块反馈卡重绘被反复朗读。 */
+  function announce(text) {
+    var node = $('live-status');
+    if (!node) return;
+    node.textContent = String(text || '');
+  }
+
   /* 引擎报错 -> 一句人话解释。原样报错仍然完整展示（学习价值），这里只是追加。 */
   var ERROR_HINTS = [
     [/no such table|no such view/i, '库里没有这个名字的表：核对表名拼写，HR_ 前缀别丢；本页是 SQLite，表名不带 dbo. 前缀。'],
@@ -144,6 +151,7 @@
 
   function repeats(ch, n) { var s = ''; for (var i = 0; i < n; i++) s += ch; return s; }
 
+  /* 顶栏只留段进度 / 题目入口 / 设置入口；游戏化指标收进「学习记录」。 */
   function renderStats() {
     var sec = currentSection();
     var stage = $('stat-stage');
@@ -155,21 +163,51 @@
     if (bar && sec) {
       bar.style.width = (sec.questions.length ? Math.round(passedInSection(sec) / sec.questions.length * 100) : 0) + '%';
     }
-    /* 游戏化指标（设计意图，2026-10-10 恢复渲染层） */
     var xp = $('stat-xp');
     if (xp) xp.textContent = 'XP ' + state.xp;
-    var hearts = $('stat-hearts');
-    if (hearts) hearts.textContent = repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
     var streak = $('stat-streak');
-    if (streak) streak.textContent = '\u{1F525}' + state.streak;
+    if (streak) {
+      var act = (state.learning && state.learning.activity) || {};
+      streak.textContent = '连续 ' + (act.activeDays || 0) + ' 天';
+    }
     var goal = $('stat-goal');
     if (goal) {
+      var d = state.learning.daily;
+      var credited = (d.creditedIds || []).length;
       var met = L.goalMet(state);
-      goal.textContent = '今日 ' + Math.min(state.todayCount, state.dailyGoal) + '/' + state.dailyGoal + (met ? ' \u2713' : '');
+      goal.textContent = '今日 ' + Math.min(credited, d.goal) + '/' + d.goal + (met ? ' \u2713' : '') +
+        (d.legacyCarry > 0 ? '（升级前已完成 ' + d.legacyCarry + ' 项）' : '');
       goal.className = 'stat stat-goal' + (met ? ' is-met' : '');
     }
-    var qh = $('q-hearts');
-    if (qh) qh.textContent = '本关心 ' + repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
+    var prog = $('stat-progress');
+    if (prog && L.sectionProgress) {
+      var sp = L.sectionProgress(state, SECTIONS);
+      var nPassed = 0, nNeeds = 0, nDue = 0;
+      sp.sections.forEach(function (s) { nPassed += s.passed; nNeeds += s.needsFix; nDue += s.due; });
+      prog.textContent = '已完成 ' + nPassed + ' 题 · 待修正 ' + nNeeds + ' 题 · 待复查 ' + nDue + ' 题';
+    }
+    var persist = $('record-persist');
+    if (persist) {
+      var memoryOnly = !!(state.learning && state.learning.persistence === 'memoryOnly');
+      if (memoryOnly) { persist.textContent = '本次进度尚未保存到浏览器（刷新可能丢失）；重试保存不会重复加分。'; show(persist, true); }
+      else { persist.textContent = ''; show(persist, false); }
+    }
+    renderAttempts();
+  }
+
+  /* 本题三次尝试：以状态机 learning.attempts 为准，不画血条、不显示生命值。 */
+  function renderAttempts() {
+    var node = $('q-attempts');
+    if (!node) return;
+    var q = currentQuestion();
+    if (!q) { node.textContent = ''; return; }
+    var a = state.learning && state.learning.attempts ? state.learning.attempts[q.id] : null;
+    if (a && a.mode === 'guided') {
+      node.textContent = '本题进入跟练模式（运行 / 改写 / 提示 / 看答案仍可用）';
+      return;
+    }
+    var left = a ? a.attemptsLeft : L.HEARTS_PER_LEVEL;
+    node.textContent = '本题剩余尝试 ' + left + '/3';
   }
 
   /* ------------------------------ 左栏题号列表 ------------------------------ */
@@ -206,6 +244,10 @@
       var ul = el('ul', null, 'qgroup');
       qs.forEach(function (q) {
         var li = el('li', null, q.id === currentId ? 'on' : '');
+        li.setAttribute('role', 'button');
+        li.setAttribute('tabindex', '0');
+        li.setAttribute('data-qid', q.id);
+        li.setAttribute('aria-label', '第 ' + pad2(q.seq) + ' 题：' + (q.title || q.id));
         var row = el('div', null, 'q-row');
         row.appendChild(el('span', pad2(q.seq), 'no'));
         row.appendChild(el('span', q.title || q.id, 'qt'));
@@ -218,14 +260,17 @@
         else if (state.wrong[q.id]) meta.appendChild(el('span', '待重做', 'chip warn'));
         li.appendChild(meta);
 
-        li.addEventListener('click', function () { selectLevel(q.id); });
+        li.addEventListener('click', function () { selectLevel(q.id, false); });
+        li.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectLevel(q.id, true); }
+        });
         ul.appendChild(li);
       });
       nav.appendChild(ul);
     });
   }
 
-  function selectLevel(id) {
+  function selectLevel(id, fromKeyboard) {
     if (!QUESTION_BY_ID[id]) return;
     currentId = id;
     state.current = id;
@@ -234,6 +279,11 @@
     renderStats();
     renderDetail();
     if (openPanel === 'rail') closePanel();
+    /* 切题后焦点回到合理位置：键盘激活时把焦点放回被选中的题行。 */
+    if (fromKeyboard) {
+      var li = document.querySelector('#section-nav li[data-qid="' + id + '"]');
+      if (li && li.focus) li.focus();
+    }
   }
 
   /* ------------------------------ 渐进提示（一个动作 + 一个计数） ------------------------------ */
@@ -264,6 +314,8 @@
     state.hintSeen[q.id] = n;
     saveProgress();
     renderHints(q);
+    if (n > 0 && list[n - 1]) announce('已展开提示 ' + n + '/' + list.length + '：' + list[n - 1]);
+    else if (!list.length) announce('本题未提供提示。');
   }
 
   function renderHints(q) {
@@ -624,6 +676,15 @@
 
     renderHints(q);
 
+    /* 参考 SQL 缺失时禁用查看答案并说明原因。 */
+    var ansBtn = $('btn-answer');
+    if (ansBtn) {
+      var hasAnswer = !!(q.reference_sql || q.reference_sql_sqlite);
+      ansBtn.disabled = !hasAnswer;
+      ansBtn.textContent = hasAnswer ? '查看答案' : '本题无参考答案';
+      ansBtn.title = hasAnswer ? '' : '题库未提供 reference_sql，禁用查看答案';
+    }
+
     show($('ref-review-block'), false);
     show($('verdict'), false);
     show($('result-block'), false);
@@ -723,7 +784,64 @@
   /* 提示 / 警告 / 错误共用同一套卡片样式（左侧 3px 色条 + 浅底）。 */
   var VERDICT_MOD = { pass: 'is-ok', fail: 'is-err', warn: 'is-warn' };
 
-  function renderVerdict(kind, title, verdict, refColumns, extraNote) {
+  /* 差异类型由 verdict 现有字段派生（不新增判题口径）。 */
+  function diffTypeOf(verdict, orderSensitive) {
+    if (!verdict) return null;
+    if (verdict.columnIssue) {
+      return verdict.columnIssue.kind === 'count'
+        ? '差异类型：列数不同'
+        : '差异类型：列名 / 列位对齐不同';
+    }
+    var kinds = {};
+    (verdict.diffRows || []).forEach(function (d) { kinds[d.kind] = true; });
+    if (kinds.missing) return '差异类型：缺失行（预期里有、你的结果里没有）';
+    if (kinds.extra) return '差异类型：多余行（你的结果里有、预期里没有）';
+    if (kinds.changed) return orderSensitive ? '差异类型：顺序不同或数值不符' : '差异类型：数值不符（行对上了，值不同）';
+    if (verdict.userRowCount != null && verdict.refRowCount != null && verdict.userRowCount !== verdict.refRowCount) {
+      return '差异类型：行数不同';
+    }
+    return '差异类型：行集不一致';
+  }
+
+  /* 只给一个最相关动作；来源是 pitfalls 时只能写「可以检查」，不断言根因。 */
+  function firstActionHint(q, verdict) {
+    var pit = (q && Array.isArray(q.pitfalls)) ? q.pitfalls : [];
+    if (verdict && verdict.columnIssue) return '可以检查：SELECT 里选了几列、是否漏了聚合列或分组列。';
+    var kinds = {};
+    (verdict && verdict.diffRows || []).forEach(function (d) { kinds[d.kind] = true; });
+    if (kinds.missing) return '可以检查：筛选条件是否排除了空值（NULL），或 JOIN 条件是否过严。';
+    if (kinds.extra) return '可以检查：WHERE 条件是否漏写，多表连接是否缺了限制。';
+    if (kinds.changed) return '可以检查：聚合口径、四舍五入或金额单位是否和题面一致。';
+    if (pit.length) return '可以检查：' + pit[0];
+    return '可以检查：题面要求的列、行与条件是否都覆盖了。';
+  }
+
+  /* 第二次判错把原理 / 语法卡 / 易错点入口露出来（不存在的内容不编造）。 */
+  function attachReviewTools(box, q) {
+    var wrap = el('div', null, 'review-tools');
+    wrap.appendChild(el('span', '回看入口：', 'muted'));
+    [['考点提示', 'principle-box'], ['语法卡', 'q-syntax']].forEach(function (t) {
+      var node = $(t[1]);
+      if (!node || (t[1] === 'q-syntax' && !node.childNodes.length)) return;
+      var b = el('button', t[0], 'link-btn');
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        node.scrollIntoView({ block: 'center' });
+      });
+      wrap.appendChild(b);
+    });
+    if (Array.isArray(q.pitfalls) && q.pitfalls.length) {
+      var det = document.createElement('details');
+      det.appendChild(el('summary', '本题易错点'));
+      var ul = el('ul');
+      q.pitfalls.forEach(function (p) { ul.appendChild(el('li', p)); });
+      det.appendChild(ul);
+      wrap.appendChild(det);
+    }
+    if (wrap.childNodes.length > 1) box.appendChild(wrap);
+  }
+
+  function renderVerdict(kind, title, verdict, refColumns, extraNote, info) {
     var box = $('verdict');
     box.className = 'card-note ' + (VERDICT_MOD[kind] || 'is-warn');
     box.textContent = '';
@@ -743,17 +861,31 @@
         box.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
           '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'muted'));
       }
-      if (verdict.diffRows && verdict.diffRows.length) {
-        var wrap = el('div', null, 'diff');
-        wrap.appendChild(el('div', '差异样例（最多 10 条）：'));
-        verdict.diffRows.forEach(function (d) {
+      var dtype = diffTypeOf(verdict, !!(info && info.orderSensitive));
+      if (dtype) box.appendChild(el('div', dtype, 'diff-type'));
+      var diffs = verdict.diffRows || [];
+      if (diffs.length) {
+        var fmt = function (d) {
           var label = d.kind === 'extra' ? '多余行' : d.kind === 'missing' ? '缺失行' : '不一致行';
           var cols = Array.isArray(refColumns) && refColumns.length ? ' 列：' + refColumns.join(' | ') : '';
-          wrap.appendChild(el('div', '[' + label + ']' + cols + '  ' + JSON.stringify(d.row), 'k-' + d.kind));
-        });
-        box.appendChild(wrap);
+          return '[' + label + ']' + cols + '  ' + JSON.stringify(d.row);
+        };
+        /* 只展示首个主要证据，其余默认折叠。 */
+        box.appendChild(el('div', fmt(diffs[0]), 'diff k-' + diffs[0].kind));
+        if (diffs.length > 1) {
+          var det = document.createElement('details');
+          det.className = 'diff diff-more';
+          var sm = document.createElement('summary');
+          sm.textContent = '展开更多差异（其余 ' + (diffs.length - 1) + ' 条）';
+          det.appendChild(sm);
+          diffs.slice(1).forEach(function (d) { det.appendChild(el('div', fmt(d), 'k-' + d.kind)); });
+          box.appendChild(det);
+        }
       }
     }
+    if (info && info.action) box.appendChild(el('div', info.action, 'verdict-action'));
+    if (info && info.reviewTools && currentQuestion()) attachReviewTools(box, currentQuestion());
+    if (info && info.reviewNote) box.appendChild(el('div', info.reviewNote, 'muted'));
     show(box, true);
   }
 
@@ -823,26 +955,37 @@
   function doJudge() {
     if (judging) return;
     judging = true;
+    /* 判题快照：发起时记下题号，异步回来若已切题就丢弃，不渲染到新题上。 */
+    var qid = currentId;
     setJudgeLoading(true);
     setTimeout(function () {
-      try { judgeNow(); }
-      catch (err) { renderRunError(String(err && err.message ? err.message : err)); }
+      try {
+        if (qid !== currentId) return;
+        judgeNow(qid);
+      }
+      catch (err) {
+        if (qid === currentId) renderRunError(String(err && err.message ? err.message : err));
+      }
       finally { judging = false; setJudgeLoading(false); }
     }, 0);
   }
 
-  function judgeNow() {
+  function judgeNow(qid) {
     if (!requireDb()) return;
-    var q = currentQuestion();
+    qid = qid || currentId;
+    if (qid !== currentId) return;
+    var q = QUESTION_BY_ID[qid];
     if (!q) return;
     var sql = $('sql-input').value;
+    var stamp = L.todayStamp();
     if (!sql.trim()) { renderVerdict('warn', '请先写 SQL 再判题。', null, null); return; }
 
     var ref = referenceResult(q);
     if (!ref.ok) {
-      $('ref-review-block').textContent = '题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错。';
+      /* 题库异常：不记用户失败、不消耗次数，允许换题。 */
+      $('ref-review-block').textContent = '题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错、不消耗次数。';
       show($('ref-review-block'), true);
-      renderVerdict('warn', '本题标记「题库待复核」，跳过判题。', null, null);
+      renderVerdict('warn', '本题标记「题库待复核」，跳过判题；你仍可换题继续。', null, null);
       return;
     }
     show($('ref-review-block'), false);
@@ -851,46 +994,82 @@
     try {
       res = window.HRDb.runQuery(db, sql);
     } catch (e) {
+      /* 执行错误不算有效结果判错：只存草稿，不消耗次数。 */
+      L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: false, execOk: false, stamp: stamp });
+      saveProgress();
+      if (qid !== currentId) return;
       renderRunError(String(e && e.message ? e.message : e));
+      renderStats();
       return;
     }
 
+    var orderSensitive = !!(q.expected && q.expected.order_sensitive);
     var verdict = window.HRJudge.judgeResult(
       res.rows, res.columns,
       ref.result.rows, ref.result.columns,
-      { orderSensitive: !!(q.expected && q.expected.order_sensitive) }
+      { orderSensitive: orderSensitive }
     );
 
     lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
     show($('result-block'), true);
     showResultTab('mine');
 
-    /* 题库对账不通过 -> 不判用户错。 */
     if (ref.mismatch) {
       $('ref-review-block').textContent = '题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
-        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错（下方结论仅供参考）。';
+        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错、不消耗次数（下方结论仅供参考）。';
       show($('ref-review-block'), true);
-      renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns);
+      renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns, null, { orderSensitive: orderSensitive });
       return;
     }
 
     state.sql[q.id] = sql;
 
     if (verdict.pass) {
-      var r = L.recordPass(state, q.id);
+      /* 唯一计分入口：recordLearningAttempt 判 + creditLearningEvent 结算。 */
+      var fb = L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: true, stamp: stamp });
+      var credit = L.creditLearningEvent(state, fb);
       saveProgress();
       renderPostPass(q);
       show($('post-pass-block'), true);
-      renderVerdict('pass', '通过 —— ' + (r.firstTime ? '首次通关' : '重复通关（同一关只计一次）'), verdict, ref.result.columns);
+      var title, passNote;
+      if (fb.duplicate) { title = '通过 —— 与上次判题相同'; passNote = '未重复计数，不重复加 XP。'; }
+      else if (fb.firstTime) { title = '通过 —— 首次完成'; passNote = '首次完成 +' + credit.xpGained + ' XP。'; }
+      else if (fb.reviewResolved) { title = '通过 —— 复查完成'; passNote = '复查完成，不重复加 XP；这题移出待复查列表。'; }
+      else { title = '通过 —— 不重复加 XP'; passNote = '结果与预期一致。'; }
+      if (fb.completionType === 'guided') passNote += ' 本次按跟练完成记录。';
+      renderVerdict('pass', title, verdict, ref.result.columns, passNote, {
+        action: '主动作：继续今日小组的下一题；次动作：回看本题语法卡 / 易错点回扣。',
+        orderSensitive: orderSensitive
+      });
     } else {
-      L.recordWrong(state, q.id);
+      var fb2 = L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: false, stamp: stamp });
       saveProgress();
-      /* 判错自动解锁下一条提示（渐进，不一次甩全） */
-      var hintList = hintTexts(q);
+      var list = hintTexts(q);
       var before = state.hintSeen[q.id] || 0;
-      if (before < hintList.length) { state.hintSeen[q.id] = before + 1; saveProgress(); }
+      if (!fb2.duplicate && !fb2.skipped && before < list.length) {
+        state.hintSeen[q.id] = before + 1;
+        saveProgress();
+        announce('已展开提示 ' + state.hintSeen[q.id] + '/' + list.length + '：' + list[state.hintSeen[q.id] - 1]);
+      }
       renderHints(q);
-      renderVerdict('fail', '未通过 —— 结果与预期不一致，已记入错题本；练习不扣分，看提示后重试即可。', verdict, ref.result.columns);
+      var left = (typeof fb2.attemptsLeft === 'number') ? fb2.attemptsLeft : 0;
+      var wrongNo = 3 - left;
+      var reviewNote = '';
+      if (fb2.duplicate) reviewNote = '与上次判题相同，未重复扣次数。';
+      else if (fb2.skipped) reviewNote = '这一步不算有效结果判错，未消耗次数。';
+      else if (wrongNo === 1) reviewNote = '第 1 次判错：已记录待修正，并展开第 1 条提示。';
+      else if (wrongNo === 2) {
+        reviewNote = '第 2 次判错：建议回看本题语法卡与易错点。';
+        if (list.length <= 1) reviewNote += ' 本题只有这条提示——不另造第二条，回看入口见下方。';
+      } else if (wrongNo >= 3) {
+        reviewNote = '已经试了 3 次，换个思路：对照提示拆开检查。运行、改写、提示、看答案仍可用，这题可以暂停、留作待修正。';
+      }
+      renderVerdict('fail', '未通过 —— 结果与预期不一致，已记录待修正；练习不扣分。', verdict, ref.result.columns, null, {
+        action: firstActionHint(q, verdict),
+        orderSensitive: orderSensitive,
+        reviewTools: wrongNo === 2 || wrongNo >= 3,
+        reviewNote: reviewNote
+      });
     }
     renderStats();
     renderNav();
@@ -899,11 +1078,26 @@
   function doAnswer() {
     var q = currentQuestion();
     if (!q) return;
-    $('answer-mssql').textContent = q.reference_sql || '（题库未提供 reference_sql，本题禁用查看答案）';
+    var mssql = q.reference_sql || '';
+    var sqlite = q.reference_sql_sqlite || q.reference_sql || '';
+    var btn = $('btn-answer');
+    if (!mssql && !sqlite) {
+      if (btn) { btn.disabled = true; btn.textContent = '本题无参考答案'; }
+      renderVerdict('warn', '本题参考 SQL 缺失，查看答案已禁用（原因：题库未提供 reference_sql）。仍可正常尝试判题。', null, null);
+      announce('本题没有参考答案，查看答案已禁用。');
+      return;
+    }
+    /* 先记当前作答轮的 answerSeen，再展示完整答案；退出 / 刷新 / 换题都不清这个标记。 */
+    L.recordLearningAttempt(state, { id: q.id, kind: 'answer', stamp: L.todayStamp() });
+    saveProgress();
+    $('answer-mssql').textContent = q.reference_sql || '（题库未提供 reference_sql）';
     $('answer-sqlite').textContent = q.reference_sql_sqlite || q.reference_sql || '（题库未提供）';
     $('answer-note').textContent = '上方为 SQL Server 权威写法（仅展示、不执行，含 dbo. 前缀）；下方为 SQLite 等价写法，' +
-      '判题的预期结果就是它在当前库上现场跑出来的。权威以 SQL Server 版为准。基准日固定 ' + BASELINE_DATE + '。';
+      '判题的预期结果就是它在当前库上现场跑出来的。权威以 SQL Server 版为准。基准日固定 ' + BASELINE_DATE + '。' +
+      '已记录本次看了完整答案，通过后将按跟练完成记录，并预约次日复查。';
     show($('answer-block'), true);
+    announce('已展开参考答案，本次作答记为跟练。');
+    renderAttempts();
   }
 
   /* ------------------------------ 编辑器字段补全 ------------------------------ */
@@ -1018,7 +1212,12 @@
       }
       /* Ctrl / Cmd + Enter 运行 */
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doRun(); return; }
-      if (e.key === 'Escape') hideSuggest();
+      if (e.key === 'Escape') {
+        var sug = $('sql-suggest');
+        if (sug && !sug.hidden) { hideSuggest(); return; }
+        this.blur();   /* Esc 退出编辑器，焦点交给页面其余控件 */
+        return;
+      }
     });
     sqlInput.addEventListener('input', onSqlEdit);
     sqlInput.addEventListener('blur', function () { hideSuggest(); });
@@ -1083,14 +1282,44 @@
     var br = $('btn-rail');
     if (br) br.addEventListener('click', function () { if (openPanel === 'rail') closePanel(); else openRail(); });
 
-    /* Esc 关闭浮层 */
+    /* Esc 关闭浮层（含学习记录）与重置确认卡 */
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && openPanel) closePanel();
+      if (e.key !== 'Escape') return;
+      if (openPanel) { closePanel(); return; }
+      if (recPanel && !recPanel.hidden) { setRecord(false); if (recBtn) recBtn.focus(); return; }
+      if (resetPanel && !resetPanel.hidden) { resetPanel.hidden = true; return; }
     });
 
+    /* 学习记录：可折叠面板，展开 / 收起带 aria-expanded，键盘可达。 */
+    var recPanel = $('record-panel');
+    var recBtn = $('btn-record');
+    function setRecord(on) {
+      if (recPanel) recPanel.hidden = !on;
+      if (recBtn) recBtn.setAttribute('aria-expanded', String(!!on));
+      if (on) renderStats();
+    }
+    if (recBtn) {
+      recBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setRecord(recPanel ? recPanel.hidden : false);
+      });
+    }
+    var recClose = $('record-close');
+    if (recClose) recClose.addEventListener('click', function () { setRecord(false); if (recBtn) recBtn.focus(); });
+    document.addEventListener('click', function (e) {
+      if (recPanel && !recPanel.hidden && recBtn && e.target !== recBtn && !recPanel.contains(e.target)) setRecord(false);
+    });
+
+    /* 重置进度：不用浏览器确认弹窗，改为页内一张确认卡（一次操作最多一张卡）。 */
+    var resetPanel = $('reset-confirm');
     $('btn-reset').addEventListener('click', function () {
-      if (!window.confirm('确定重置全部进度？通过记录 / 错题本 / 已写 SQL 全部清空。')) return;
-      if (!window.confirm('再确认一次：此操作不可撤销。')) return;
+      if (resetPanel) resetPanel.hidden = false;
+    });
+    var resetNo = $('btn-reset-no');
+    if (resetNo) resetNo.addEventListener('click', function () { if (resetPanel) resetPanel.hidden = true; });
+    var resetYes = $('btn-reset-yes');
+    if (resetYes) resetYes.addEventListener('click', function () {
+      if (resetPanel) resetPanel.hidden = true;
       state = L.freshState();
       L.ensureDay(state, L.todayStamp());
       saveProgress();
