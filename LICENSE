@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-----------------------------------------------------------------------------
-Third-party notice
-
-vendor/sqljs/sql-wasm.js and vendor/sqljs/sql-wasm.wasm are the SQLite-compiled-
-to-WebAssembly distribution of sql.js (version 1.14.2), which is licensed under
-the MIT License. These files are vendored as-is and are inlined into the built
-single-file HTML artifact by build.mjs.
