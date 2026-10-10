@@ -23,7 +23,8 @@ const HRDb = globalThis.HRDb;
 const schemaSql = fs.readFileSync(path.join(ROOT, 'data', 'schema_sqlite.sql'), 'utf8');
 const seedSql = fs.readFileSync(path.join(ROOT, 'data', 'seed_sqlite.sql'), 'utf8');
 const wasm = fs.readFileSync(path.join(ROOT, 'vendor', 'sqljs', 'sql-wasm.wasm')).toString('base64');
-const qs = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'questions.json'), 'utf8')).questions;
+const questionsPath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(ROOT, 'data', 'questions.json');
+const qs = JSON.parse(fs.readFileSync(questionsPath, 'utf8')).questions;
 
 const SQL = await initSqlJs({ wasmBinary: HRDb.base64ToArrayBuffer(wasm) });
 const build = () => { const d = new SQL.Database(); d.run(schemaSql); d.run(seedSql); return d; };
@@ -55,10 +56,10 @@ for (const q of qs) {
   if (exp.columns && res.columns.length !== exp.columns.length) {
     probs.push('column_count got ' + res.columns.length + ' want ' + exp.columns.length);
   }
-  if (exp.row_count !== undefined && R.length !== exp.row_count) {
+  if (typeof exp.row_count === 'number' && R.length !== exp.row_count) {
     probs.push('row_count got ' + R.length + ' want ' + exp.row_count);
   }
-  if (exp.row_count !== undefined && expRows.length > exp.row_count) {
+  if (typeof exp.row_count === 'number' && expRows.length > exp.row_count) {
     probs.push('expected.rows 比 row_count 还多');
   }
 
