@@ -1,15 +1,13 @@
 /*
- * src/app.js — DB Quest v2 界面逻辑（DOM 操作）
+ * src/app.js — HR 语境 SQL 练习台 界面逻辑（DOM 操作）—— UI 收敛版（2026-10-10）
  * ---------------------------------------------------------------------------
- * 依赖注入关系（为什么这么分层）：
- *   HR_BOOT   —— build.mjs 内联进来的权威数据（题库 / DDL / DML / wasm base64）
- *   HRJudge   —— src/judge.js，纯函数判题引擎；本文件只「接线调用」，绝不改判题口径
- *   HRLevels  —— src/levels.js，段编排 + 游戏化状态机 + localStorage 读写（纯逻辑）
- *   HRDb      —— src/db.js，sql.js 加载 / 建库灌数 / 11 表自检 / 跑查询
- * 本文件只做三件事：把状态渲染成 DOM、把用户动作转成对上述模块的调用、把结果写回状态。
+ * 本次只改「UI 与信息呈现」：判题口径、题库、20 题内容、数据（tables.js / 内联种子）一律未动。
+ * 布局：左栏题号列表 + 主列（题面 / 深色编辑器 / 结果）；表结构、方言对照改右侧抽屉（默认收起）。
+ * 游戏化：只保留段/关进度与通关徽章；XP、连击、今日配额、心形生命值全部不再呈现。
  *
- * 进度键 dbquest.v2（v1 练习台的键不复用，避免脏数据）。任何状态变化立即 saveProgress()。
- * 所有题库文本一律 textContent 写入，不拼 HTML。
+ * 依赖注入关系（不变）：
+ *   HR_BOOT / HRJudge / HRLevels / HRDb / HRTables；本文件只把状态渲染成 DOM、把动作转成调用。
+ * 进度键 dbquest.v2；状态变化立即 saveProgress()。题库文本一律 textContent 写入，不拼 HTML。
  */
 (function () {
   'use strict';
@@ -56,8 +54,12 @@
   var db = null;
   var dbReady = false;
   var refCache = {};          // id -> 参考 SQL 的实跑结果（含是否与 expected.row_count 对账成功）
-  var openSections = {};      // level -> 是否展开
   var currentId = null;
+  var judging = false;
+
+  var openPanel = null;       // 'drawer' | 'rail' | null
+  var lastRun = null;         // { columns, rows }：最近一次「运行」的结果，供结果区 tab 切换
+  var filter = { kw: '', diffs: {}, undoneOnly: false };
 
   /* ------------------------------ 小工具 ------------------------------ */
   function $(id) { return document.getElementById(id); }
@@ -81,7 +83,7 @@
     return n;
   }
 
-  function repeats(ch, n) { var s = ''; for (var i = 0; i < n; i++) s += ch; return s; }
+  function pad2(n) { n = Number(n) || 0; return (n < 10 ? '0' : '') + n; }
 
   function showBanner(id, text) {
     var node = $(id);
@@ -108,7 +110,29 @@
     return '本引擎原样返回了上面的报错；把报错点到的表名 / 列名 / 关键字逐个核对一遍。';
   }
 
-  /* ------------------------------ 顶栏统计 ------------------------------ */
+  /* 语句级预检：先看语句自身的结构缺口，再落到引擎报错的文本翻译上。
+     漏 FROM 时 SQLite 先抛 no such column，若只按报错文本翻译会把学员引去核列名 —— 这里优先纠结构。 */
+  function sqlTriage(sql) {
+    /* 剥掉行注释 / 块注释，避免注释里的关键字参与判定 */
+    var s = String(sql || '')
+      .replace(/--[^\n]*/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    var up = s.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (!up) return null;
+    var q = currentQuestion();
+    var names = (q && TABLE_MAP[q.seq]) || [];
+    var tableHint = names.length ? names.join(' / ') : '见上方「涉及的表 / 字段」';
+    if (up.indexOf('FROM') === -1) {
+      return '缺少 FROM 子句：SELECT 的字段来自哪张表？本题的表是 ' + tableHint +
+        '（本页是 SQLite，表名不加 dbo. 前缀）。';
+    }
+    if (/\bFROM\s*(WHERE|GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|;|$)/.test(up)) {
+      return 'FROM 后面没写表名：把它补上。本题的表是 ' + tableHint + '。';
+    }
+    return null;
+  }
+
+  /* ------------------------------ 顶栏进度（唯一全屏游戏化指标） ------------------------------ */
   function currentSection() {
     var q = currentQuestion();
     if (q && SECTION_OF[q.id]) return SECTION_OF[q.id];
@@ -117,19 +141,31 @@
 
   function renderStats() {
     var sec = currentSection();
-    if (sec) $('stat-stage').textContent = '第' + sec.level + '段 ' + passedInSection(sec) + '/' + sec.questions.length;
-    $('stat-xp').textContent = 'XP ' + state.xp;
-    $('stat-hearts').textContent = repeats('\u2764', state.hearts) + repeats('\u{1F90D}', L.HEARTS_PER_LEVEL - state.hearts);
-    $('stat-streak').textContent = '\u{1F525}' + state.streak;
-    var goal = $('stat-goal');
-    var met = L.goalMet(state);
-    goal.textContent = '今日 ' + Math.min(state.todayCount, state.dailyGoal) + '/' + state.dailyGoal + (met ? ' \u2713' : '');
-    goal.className = 'stat goal' + (met ? ' is-met' : '');
-    var hh = $('q-hearts');
-    if (hh) hh.textContent = '本关心 ' + repeats('\u2764', state.hearts) + repeats('\u{1F90D}', L.HEARTS_PER_LEVEL - state.hearts);
+    var stage = $('stat-stage');
+    if (sec && stage) {
+      var done = passedInSection(sec);
+      stage.textContent = '第 ' + sec.level + ' 段 · 已完成 ' + done + '/' + sec.questions.length;
+    }
+    var bar = $('stat-bar');
+    if (bar && sec) {
+      bar.style.width = (sec.questions.length ? Math.round(passedInSection(sec) / sec.questions.length * 100) : 0) + '%';
+    }
   }
 
-  /* ------------------------------ 左栏主线 ------------------------------ */
+  /* ------------------------------ 左栏题号列表 ------------------------------ */
+  function questionMatches(q) {
+    var kw = String(filter.kw || '').trim().toLowerCase();
+    if (kw) {
+      var hay = ('#' + q.seq + ' ' + q.id + ' ' + (q.title || '') + ' ' + (q.knowledge_point || '') +
+        ' ' + (q.subject || '') + ' ' + ((q.tags || []).join(' '))).toLowerCase();
+      if (hay.indexOf(kw) === -1) return false;
+    }
+    var on = Object.keys(filter.diffs).filter(function (k) { return filter.diffs[k]; });
+    if (on.length && on.indexOf(String(q.level)) === -1) return false;
+    if (filter.undoneOnly && state.passed[q.id]) return false;
+    return true;
+  }
+
   function renderNav() {
     var nav = $('section-nav');
     if (!nav) return;
@@ -137,40 +173,35 @@
     var activeSec = currentSection();
 
     SECTIONS.forEach(function (sec) {
+      var qs = sec.questions.filter(questionMatches);
       var isActive = activeSec && activeSec.level === sec.level;
-      if (openSections[sec.level] === undefined) openSections[sec.level] = !!isActive;
 
-      var box = el('div', null, 'section' + (isActive ? ' active' : ''));
-      var head = el('div', null, 'section-head');
-      head.appendChild(el('span', (openSections[sec.level] ? '\u25be ' : '\u25b8 ') + '第' + sec.level + '段 · ' + sec.title));
-      head.appendChild(el('span', passedInSection(sec) + '/' + sec.questions.length, 'sec-count'));
-      head.addEventListener('click', function () {
-        openSections[sec.level] = !openSections[sec.level];
-        renderNav();
-      });
-      box.appendChild(head);
+      var head = el('div', null, 'group-head' + (isActive ? ' on' : ''));
+      head.appendChild(el('span', '第 ' + sec.level + ' 段 · ' + sec.title, 'group-title'));
+      head.appendChild(el('span', passedInSection(sec) + '/' + sec.questions.length, 'group-count'));
+      nav.appendChild(head);
 
-      var ul = el('ul', null, 'levels');
-      ul.hidden = !openSections[sec.level];
-      sec.questions.forEach(function (q) {
-        var li = document.createElement('li');
-        var cls = [];
-        if (q.id === currentId) cls.push('active');
-        if (state.passed[q.id]) cls.push('passed');
-        if (state.wrong[q.id]) cls.push('wrong');
-        if (cls.length) li.className = cls.join(' ');
-        li.appendChild(el('span', '#' + q.seq, 'lv-seq'));
-        var titleWrap = el('span', null, 'lv-title');
-        titleWrap.appendChild(el('span', q.title || q.id));
-        titleWrap.appendChild(el('span', q.knowledge_point || '', 'lv-kp'));
-        li.appendChild(titleWrap);
-        if (state.passed[q.id]) li.appendChild(el('span', '\u2713', 'lv-mark done'));
-        else if (state.wrong[q.id]) li.appendChild(el('span', '\u26a0', 'lv-mark wrong-mark'));
+      if (!qs.length) { nav.appendChild(el('div', '本段没有匹配的题', 'group-empty')); return; }
+
+      var ul = el('ul', null, 'qgroup');
+      qs.forEach(function (q) {
+        var li = el('li', null, q.id === currentId ? 'on' : '');
+        var row = el('div', null, 'q-row');
+        row.appendChild(el('span', pad2(q.seq), 'no'));
+        row.appendChild(el('span', q.title || q.id, 'qt'));
+        li.appendChild(row);
+
+        var meta = el('span', null, 'qmeta');
+        meta.appendChild(el('span', q.subject || '-', 'chip solid'));
+        meta.appendChild(el('span', 'L' + q.level, 'chip'));
+        if (state.passed[q.id]) meta.appendChild(el('span', '已完成', 'chip ok'));
+        else if (state.wrong[q.id]) meta.appendChild(el('span', '待重做', 'chip warn'));
+        li.appendChild(meta);
+
         li.addEventListener('click', function () { selectLevel(q.id); });
         ul.appendChild(li);
       });
-      box.appendChild(ul);
-      nav.appendChild(box);
+      nav.appendChild(ul);
     });
   }
 
@@ -178,16 +209,22 @@
     if (!QUESTION_BY_ID[id]) return;
     currentId = id;
     state.current = id;
-    var sec = SECTION_OF[id];
-    if (sec) openSections[sec.level] = true;
     saveProgress();
     renderNav();
     renderStats();
     renderDetail();
+    if (openPanel === 'rail') closePanel();
   }
 
-  /* ------------------------------ 渐进提示 ------------------------------ */
-  function hintTexts(q) { return L.hintList(q); }
+  /* ------------------------------ 渐进提示（一个动作 + 一个计数） ------------------------------ */
+  function hintTexts(q) {
+    var list = L.hintList(q).slice();
+    /* HRIS 裁定 3：本题结果规模数字移到渐进提示最后一层；
+       expected_note 里的答案数字（以「正确答案」开头）永不上屏、不进判题。 */
+    var note = q && q.expected_note;
+    if (note && note.indexOf('正确答案') !== 0) list.push(note);
+    return list;
+  }
 
   function hintSeen(q) {
     var list = hintTexts(q);
@@ -215,19 +252,28 @@
     var ul = $('hint-list');
     ul.textContent = '';
     for (var i = 0; i < seen; i++) ul.appendChild(el('li', list[i]));
-    $('hint-counter').textContent = list.length ? '已解锁 ' + seen + '/' + list.length : '本题未提供提示';
     show($('hint-empty'), seen === 0 && list.length > 0);
+
     var btn = $('btn-hint');
-    btn.disabled = !list.length || seen >= list.length;
-    btn.textContent = seen >= list.length && list.length ? '提示已全部解锁' : '再看一条';
+    if (!btn) return;
+    if (!list.length) { btn.textContent = '本题未提供提示'; btn.disabled = true; return; }
+    var all = seen >= list.length;
+    btn.disabled = all;
+    btn.textContent = (all ? '提示已全部解锁' : '看下一条提示') + '（' + seen + '/' + list.length + '）';
   }
 
-  /* ------------------------------ 表结构速查 ------------------------------ */
-  /* 只渲染结构（表名 / 中文名 / 字段 / 类型 / 可空 / 业务含义），数据行一律不出现。 */
+  /* ------------------------------ 表结构速查（只列结构，零数据行） ------------------------------ */
   function buildFieldTable(table, matchedFields) {
     var mark = {};
     (matchedFields || []).forEach(function (n) { mark[String(n).toUpperCase()] = true; });
     var tbl = el('table', null, 'field-table');
+    var cg = document.createElement('colgroup');
+    ['c1', 'c2', 'c3', ''].forEach(function (c) {
+      var col = document.createElement('col');
+      if (c) col.className = c;
+      cg.appendChild(col);
+    });
+    tbl.appendChild(cg);
     var thead = document.createElement('thead');
     var htr = document.createElement('tr');
     ['字段', '类型', '可空', '业务含义'].forEach(function (h) { htr.appendChild(el('th', h)); });
@@ -240,7 +286,9 @@
       tr.appendChild(el('td', f.name, 'f-name'));
       tr.appendChild(el('td', f.type, 'f-type'));
       tr.appendChild(el('td', f.nullable ? '是' : '否', 'f-null'));
-      tr.appendChild(el('td', f.note, 'f-note'));
+      var note = el('td', f.note, 'f-note');
+      note.title = f.note || '';
+      tr.appendChild(note);
       tbody.appendChild(tr);
     });
     tbl.appendChild(tbody);
@@ -256,7 +304,10 @@
     sum.appendChild(el('span', name, 'tbl-chip-name'));
     if (t) {
       sum.appendChild(el('span', t.cn_name, 'tbl-chip-cn'));
-      sum.appendChild(el('span', t.fields.length + ' 字段', 'tbl-chip-count'));
+      /* HRIS 裁定 1：每张表标「共 N 行」，口径取 data/rowcount_expected.json（BOOT.rowcountExpected），不写死；
+         视图不走 tableChip 这条渲染路径（renderTablesPanel 用 view-row 单独渲染），故视图天然不标。 */
+      var rc = (BOOT.rowcountExpected || {})[name];
+      sum.appendChild(el('span', t.fields.length + ' 字段' + (typeof rc === 'number' ? ' · 共 ' + rc + ' 行' : ''), 'tbl-chip-count'));
     } else {
       sum.appendChild(el('span', '（结构表未登记）', 'tbl-chip-cn'));
     }
@@ -270,9 +321,9 @@
     return det;
   }
 
-  /* 每题题干预设区：列出该题涉及的表，点开看全字段。标题用「涉及的表 / 字段」。 */
+  /* 每题题干预设区：列出该题涉及的表，点开看全字段（默认收起）。 */
   function renderQuestionTables(q) {
-    var block = $('q-tables-block');
+    var block = $('tables-toggle');
     var box = $('q-tables');
     if (!block || !box) return;
     if (!T || !MODEL_NOTES) { show(block, false); return; }
@@ -280,10 +331,114 @@
     if (!names.length) { show(block, false); return; }
     box.textContent = '';
     names.forEach(function (n) { box.appendChild(tableChip(n, [], false)); });
+    var cap = $('q-tables-cap');
+    if (cap) cap.textContent = names.length + ' 张表 · 只给结构，不含数据行';
     show(block, true);
   }
 
-  /* 左栏「表结构」页签：可搜索、可点开；末尾附 3 个视图（只列作用）。 */
+  /* R-003：本题涉及字段里凡 *Code 字段，直接列出该题用得到的码值（字段名 ＋ 码值 ＋ 中文）。
+     码值一律现查 HR_DICT，不写死在题目里——以后改码值不会不同步。 */
+  function dictTypesInDb() {
+    /* 现查 HR_DICT 里实际存在的字典类型；查不到就返回空 → 整块不显示，不报错。 */
+    if (!dbReady || !db) return [];
+    try {
+      var res = window.HRDb.runQuery(db, 'SELECT DISTINCT DictType AS dt FROM HR_DICT');
+      return (res.rows || []).map(function (r) { return String(r[0]); });
+    } catch (e) { return []; }
+  }
+
+  function fieldNoteOf(fieldName) {
+    /* 兜底通道：该字段说明里显式写了「HR_DICT 的 XXX」时，按它认字典。 */
+    if (!T || !T.allTables) return '';
+    var all = T.allTables();
+    for (var i = 0; i < all.length; i++) {
+      var fs2 = all[i].fields || [];
+      for (var j = 0; j < fs2.length; j++) {
+        if (fs2[j].name === fieldName) return String(fs2[j].note || '');
+      }
+    }
+    return '';
+  }
+
+  function dictTypeOfField(fieldName, allTypes) {
+    /* 通道 1：字段名去 Code 后缀 → SCREAMING_SNAKE
+       （EducationCode → EDUCATION、EmpTypeCode → EMP_TYPE），再拿 HR_DICT 实有类型自校验。 */
+    var base = String(fieldName || '').replace(/Code$/, '');
+    var guess = base.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+    if (allTypes.indexOf(guess) !== -1) return guess;
+    /* 通道 2：字段说明里写了「HR_DICT 的 XXX」。 */
+    var m = fieldNoteOf(fieldName).match(/HR_DICT\s*的\s*([A-Z_]+)/);
+    if (m && allTypes.indexOf(m[1]) !== -1) return m[1];
+    return null;
+  }
+
+  function dictValuesOf(dictType) {
+    try {
+      var res = window.HRDb.runQuery(db,
+        "SELECT Code, Title FROM HR_DICT WHERE DictType = '" + dictType + "' ORDER BY SortNo");
+      return res.rows || [];
+    } catch (e) { return []; }
+  }
+
+  function codeFieldsInQuestion(q) {
+    /* 本题用到的 *Code 字段：从参考 SQL 里取（判题基准就是它，口径一致）。 */
+    var sql = String((q && (q.reference_sql_sqlite || q.reference_sql)) || '');
+    var found = sql.match(/\b[A-Za-z_][A-Za-z0-9_]*Code\b/g) || [];
+    var uniq = [];
+    found.forEach(function (f) { if (uniq.indexOf(f) === -1) uniq.push(f); });
+    return uniq;
+  }
+
+  function renderDictHints(q) {
+    var host = $('q-dict-hints');
+    if (!host) return;
+    host.textContent = '';
+    host.hidden = true;
+    if (!q) return;
+    var fields = codeFieldsInQuestion(q);
+    if (!fields.length) return;
+    var allTypes = dictTypesInDb();
+    if (!allTypes.length) return;
+    var parts = [];
+    var usedDicts = [];
+    fields.forEach(function (fn) {
+      var dt = dictTypeOfField(fn, allTypes);
+      if (!dt) return;
+      var vals = dictValuesOf(dt);
+      if (!vals.length) return;
+      parts.push({ field: fn, dict: dt, vals: vals });
+      if (usedDicts.indexOf(dt) === -1) usedDicts.push(dt);
+    });
+    if (!parts.length) return;
+    host.appendChild(el('div', '本题用到 ' + usedDicts.join(' / ') + '（共 ' + usedDicts.length +
+      ' 类字典），该题用得到的码值如下：', 'dh-cap'));
+    parts.forEach(function (p) {
+      var item = el('div', null, 'dh-item');
+      item.appendChild(el('div', p.field + '（字典 ' + p.dict + '）', 'dh-head'));
+      var line = el('div', null, 'dh-vals');
+      p.vals.forEach(function (r) {
+        var span = el('span', null, 'dh-val');
+        span.appendChild(el('b', String(r[0]), 'dh-code'));
+        span.appendChild(document.createTextNode('=' + String(r[1])));
+        line.appendChild(span);
+      });
+      item.appendChild(line);
+      host.appendChild(item);
+    });
+    host.hidden = false;
+  }
+
+  function toggleQuestionTables() {
+    var body = $('q-tables-body');
+    if (!body) return;
+    body.hidden = !body.hidden;
+    var caret = $('q-tables-caret');
+    if (caret) caret.classList.toggle('open', !body.hidden);
+    var head = $('tables-toggle-head');
+    if (head) head.setAttribute('aria-expanded', String(!body.hidden));
+  }
+
+  /* 右侧抽屉「表结构」页签：可搜索、可点开；末尾附 3 个视图（只列作用）。 */
   function renderTablesPanel(keyword) {
     var list = $('tables-list');
     if (!list || !T) return;
@@ -291,7 +446,7 @@
     list.textContent = '';
     var results = T.searchTables(kw);
     if (!results.length) {
-      list.appendChild(el('div', '没有匹配的表或字段。', 'note'));
+      list.appendChild(el('div', '没有匹配的表或字段。', 'muted'));
     } else {
       results.forEach(function (r) { list.appendChild(tableChip(r.table.name, r.matchedFields, false)); });
     }
@@ -310,25 +465,39 @@
     }
   }
 
-  function bindSidebarTabs() {
-    var tl = $('tab-levels');
-    var tt = $('tab-tables');
-    if (!tl || !tt) return;
-    function activate(tablesOn) {
-      tl.classList.toggle('is-active', !tablesOn);
-      tt.classList.toggle('is-active', tablesOn);
-      tl.setAttribute('aria-selected', String(!tablesOn));
-      tt.setAttribute('aria-selected', String(tablesOn));
-      var pl = $('panel-levels');
-      var pt = $('panel-tables');
-      if (pl) pl.hidden = tablesOn;
-      if (pt) pt.hidden = !tablesOn;
-    }
-    tl.addEventListener('click', function () { activate(false); });
-    tt.addEventListener('click', function () { activate(true); });
-    var search = $('tables-search');
-    if (search) search.addEventListener('input', function () { renderTablesPanel(this.value); });
-    renderTablesPanel('');
+  /* ------------------------------ 抽屉 / 左栏浮层 ------------------------------ */
+  function setDrawerTab(tab) {
+    var tt = $('tab-tables'), td = $('tab-dialect');
+    if (tt) { tt.classList.toggle('on', tab === 'tables'); tt.setAttribute('aria-selected', String(tab === 'tables')); }
+    if (td) { td.classList.toggle('on', tab === 'dialect'); td.setAttribute('aria-selected', String(tab === 'dialect')); }
+    show($('panel-tables'), tab === 'tables');
+    show($('panel-dialect'), tab === 'dialect');
+  }
+
+  function openDrawer(tab) {
+    setDrawerTab(tab);
+    show($('drawer'), true);
+    var d = $('drawer');
+    if (d) d.setAttribute('aria-hidden', 'false');
+    show($('scrim'), true);
+    openPanel = 'drawer';
+  }
+
+  function openRail() {
+    var r = $('rail');
+    if (r) r.classList.add('is-open');
+    show($('scrim'), true);
+    openPanel = 'rail';
+  }
+
+  function closePanel() {
+    show($('drawer'), false);
+    var d = $('drawer');
+    if (d) d.setAttribute('aria-hidden', 'true');
+    var r = $('rail');
+    if (r) r.classList.remove('is-open');
+    show($('scrim'), false);
+    openPanel = null;
   }
 
   /* ------------------------------ 单关渲染 ------------------------------ */
@@ -338,27 +507,46 @@
     show($('detail-body'), !!q);
     if (!q) return;
 
-    $('q-title').textContent = '第' + q.level + '段 · #' + q.seq + ' ' + (q.title || q.id);
+    $('q-title').textContent = '#' + pad2(q.seq) + ' ' + (q.title || q.id);
+    var lv = $('q-level');
+    if (lv) lv.textContent = '难度 L' + q.level;
 
+    /* 题面 meta 行：压成一行 12px 灰字；与考点/业务域重复的标签删掉。 */
     var meta = $('q-meta');
     meta.textContent = '';
-    var parts = ['难度 L' + q.level, '业务域 ' + (q.subject || '-'), '考点 ' + (q.knowledge_point || '-'), 'id ' + q.id];
+    var kp = String(q.knowledge_point || ''), subj = String(q.subject || '');
+    var parts = ['难度 L' + q.level, '业务域 ' + (subj || '-'), '考点 ' + (kp || '-'), '题号 ' + q.id];
+    var uniq = [];
+    (Array.isArray(q.tags) ? q.tags : []).forEach(function (t) {
+      t = String(t);
+      if (!t || kp.indexOf(t) !== -1 || subj.indexOf(t) !== -1) return;
+      if (uniq.indexOf(t) !== -1) return;
+      uniq.push(t);
+    });
+    if (uniq.length) parts.push('标签 ' + uniq.join(' / '));
     parts.forEach(function (t) { meta.appendChild(el('span', t)); });
-    if (Array.isArray(q.tags) && q.tags.length) meta.appendChild(el('span', '标签 ' + q.tags.join(' / ')));
 
     var principle = $('q-principle');
     principle.textContent = '';
-    principle.appendChild(el('div', '主考点：' + (q.knowledge_point || '-')));
+    principle.appendChild(el('div', '主考点：' + (kp || '-')));
     if (Array.isArray(q.secondary_points) && q.secondary_points.length) {
       principle.appendChild(el('div', '次要考点：' + q.secondary_points.join(' / ')));
     }
-    principle.appendChild(el('div', '本题在结果集层面判分：只比跑出来的行与列，不比 SQL 写法。', 'note'));
+    principle.appendChild(el('div', '本题在结果集层面判分：只比跑出来的行与列，不比 SQL 写法。', 'muted'));
 
     $('q-stem').textContent = q.stem || '';
     $('q-requirement').textContent = q.requirement || '';
     $('q-output').textContent = q.output_hint || '';
 
+    /* 涉及的表 / 字段：默认收起 */
+    var tbody = $('q-tables-body');
+    if (tbody) tbody.hidden = true;
+    var caret = $('q-tables-caret');
+    if (caret) caret.classList.remove('open');
+    var thead = $('tables-toggle-head');
+    if (thead) thead.setAttribute('aria-expanded', 'false');
     renderQuestionTables(q);
+    renderDictHints(q);
 
     var sqlInput = $('sql-input');
     sqlInput.value = state.sql[q.id] || '';
@@ -370,9 +558,11 @@
     show($('verdict'), false);
     show($('result-block'), false);
     show($('answer-block'), false);
+    lastRun = null;
 
     var post = $('post-pass-block');
     if (state.passed[q.id]) { renderPostPass(q); show(post, true); } else { show(post, false); }
+
     renderStats();
   }
 
@@ -382,9 +572,17 @@
     (q.pitfalls || []).forEach(function (p) { ul.appendChild(el('li', p)); });
     if (!(q.pitfalls || []).length) ul.appendChild(el('li', '题库未登记易错点。'));
     $('q-dialect').textContent = q.dialect_note || '本题未登记方言提示。';
+
+    var badge = $('pass-badge');
+    if (badge) {
+      var sec = SECTION_OF[q.id];
+      var all = sec && sec.questions.every(function (x) { return state.passed[x.id]; });
+      if (all) { badge.textContent = '第 ' + sec.level + ' 段通关'; show(badge, true); }
+      else show(badge, false);
+    }
   }
 
-  /* forbidden_syntax 命中只警告不阻断（任务卡 §4.8）。 */
+  /* forbidden_syntax 命中只警告不阻断。 */
   function checkForbidden() {
     var q = currentQuestion();
     var warn = $('forbidden-warning');
@@ -426,22 +624,54 @@
     table.appendChild(tbody);
   }
 
+  function showResultTab(which) {
+    var mine = $('tab-mine'), refTab = $('tab-ref');
+    if (mine) mine.classList.toggle('on', which === 'mine');
+    if (refTab) refTab.classList.toggle('on', which === 'ref');
+    var note = $('result-note');
+    var table = $('result-table');
+
+    if (which === 'mine') {
+      if (!lastRun) { note.textContent = '还没有运行结果，点上方的「运行」跑一次。'; table.textContent = ''; return; }
+      renderTable(table, lastRun.columns, lastRun.rows, MAX_PREVIEW_ROWS);
+      note.textContent = '共 ' + lastRun.rows.length + ' 行、' + lastRun.columns.length + ' 列' +
+        (lastRun.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。');
+      return;
+    }
+
+    var q = currentQuestion();
+    if (!q) return;
+    if (!dbReady) { note.textContent = '数据库尚未就绪，请稍后重试。'; table.textContent = ''; return; }
+    var ref = referenceResult(q);
+    if (!ref.ok) { note.textContent = '预期结果：参考 SQL 执行失败（' + ref.error + '）。'; table.textContent = ''; return; }
+    renderTable(table, ref.result.columns, ref.result.rows, MAX_PREVIEW_ROWS);
+    note.textContent = '预期结果（题库参考 SQL 在本地库实跑，权威源 = SQL Server）·共 ' + ref.result.rows.length + ' 行' +
+      (ref.mismatch ? '（与 expected.row_count 不一致，题库待复核）' : '');
+  }
+
+  /* 提示 / 警告 / 错误共用同一套卡片样式（左侧 3px 色条 + 浅底）。 */
+  var VERDICT_MOD = { pass: 'is-ok', fail: 'is-err', warn: 'is-warn' };
+
   function renderVerdict(kind, title, verdict, refColumns, extraNote) {
     var box = $('verdict');
-    box.className = 'verdict ' + kind;
+    box.className = 'card-note ' + (VERDICT_MOD[kind] || 'is-warn');
     box.textContent = '';
-    box.appendChild(el('div', title));
-    if (extraNote) box.appendChild(el('div', extraNote, 'note'));
+    box.appendChild(el('div', title, 'verdict-title'));
+    if (extraNote) box.appendChild(el('div', extraNote, 'muted'));
     if (verdict) {
-      box.appendChild(el('div', verdict.reason, 'note'));
+      box.appendChild(el('div', verdict.reason, 'muted'));
       if (verdict.columnIssue) {
         var p = [verdict.columnIssue.message];
         if (verdict.columnIssue.missing && verdict.columnIssue.missing.length) p.push('缺失列：' + verdict.columnIssue.missing.join('、'));
         if (verdict.columnIssue.extra && verdict.columnIssue.extra.length) p.push('多余列：' + verdict.columnIssue.extra.join('、'));
-        box.appendChild(el('div', p.join(' '), 'note'));
+        box.appendChild(el('div', p.join(' '), 'muted'));
       }
-      box.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
-        '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'note'));
+      if (verdict.refRowCount == null) {
+        box.appendChild(el('div', '预期行数 —（SQL 未跑通，未计算）', 'muted'));
+      } else {
+        box.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
+          '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'muted'));
+      }
       if (verdict.diffRows && verdict.diffRows.length) {
         var wrap = el('div', null, 'diff');
         wrap.appendChild(el('div', '差异样例（最多 10 条）：'));
@@ -458,9 +688,12 @@
 
   function renderRunError(msg) {
     show($('result-block'), false);
+    /* 语句级预检优先：漏 FROM 时引擎先抛 no such column，只翻译报错文本会把学员引去核列名。 */
+    var sql = ($('sql-input') && $('sql-input').value) || '';
+    var triage = sqlTriage(sql);
     renderVerdict('fail', 'SQL 执行错误（原样展示）：', {
-      reason: msg, columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: 0, refRowCount: 0
-    }, null, '人话：' + explainError(msg));
+      reason: msg, columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: null, refRowCount: null
+    }, null, '人话：' + (triage ? triage : explainError(msg)));
   }
 
   /* ------------------------------ 数据库 / 参考结果 ------------------------------ */
@@ -501,14 +734,32 @@
       renderRunError(String(e && e.message ? e.message : e));
       return;
     }
-    renderTable($('result-table'), res.columns, res.rows, MAX_PREVIEW_ROWS);
-    $('result-note').textContent = '共 ' + res.rows.length + ' 行、' + res.columns.length + ' 列' +
-      (res.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。');
+    lastRun = { columns: res.columns, rows: res.rows };
     show($('result-block'), true);
+    showResultTab('mine');
     if (q) { state.sql[q.id] = sql; saveProgress(); }
   }
 
+  /* 判题：同步计算，但先给按钮 loading 态让浏览器有机会重绘；不阻塞编辑器输入。 */
+  function setJudgeLoading(on) {
+    var b = $('btn-judge');
+    if (!b) return;
+    if (on) { b.setAttribute('data-label', b.textContent); b.textContent = '判题中…'; b.disabled = true; }
+    else { var lbl = b.getAttribute('data-label'); if (lbl) b.textContent = lbl; b.disabled = false; }
+  }
+
   function doJudge() {
+    if (judging) return;
+    judging = true;
+    setJudgeLoading(true);
+    setTimeout(function () {
+      try { judgeNow(); }
+      catch (err) { renderRunError(String(err && err.message ? err.message : err)); }
+      finally { judging = false; setJudgeLoading(false); }
+    }, 0);
+  }
+
+  function judgeNow() {
     if (!requireDb()) return;
     var q = currentQuestion();
     if (!q) return;
@@ -517,7 +768,7 @@
 
     var ref = referenceResult(q);
     if (!ref.ok) {
-      $('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错。';
+      $('ref-review-block').textContent = '题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错。';
       show($('ref-review-block'), true);
       renderVerdict('warn', '本题标记「题库待复核」，跳过判题。', null, null);
       return;
@@ -538,10 +789,14 @@
       { orderSensitive: !!(q.expected && q.expected.order_sensitive) }
     );
 
-    /* 题库对账不通过 → 不判用户错，也不扣心。 */
+    lastRun = { columns: res.columns, rows: res.rows };
+    show($('result-block'), true);
+    showResultTab('mine');
+
+    /* 题库对账不通过 -> 不判用户错。 */
     if (ref.mismatch) {
-      $('ref-review-block').textContent = '⚠ 题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
-        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错（下方结论仅供参考），也不扣心。';
+      $('ref-review-block').textContent = '题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
+        ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错（下方结论仅供参考）。';
       show($('ref-review-block'), true);
       renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns);
       return;
@@ -554,25 +809,16 @@
       saveProgress();
       renderPostPass(q);
       show($('post-pass-block'), true);
-      var note = r.firstTime
-        ? '过关 +' + r.xpGained + ' XP' + (r.streak > 0 ? '，连胜 ' + r.streak : '')
-        : '重复通关，不再加分（同一关只计一次）';
-      if (r.goalMet && r.firstTime) note += '；今日目标已达成 \u2713';
-      renderVerdict('pass', '通过 —— ' + note, verdict, ref.result.columns);
+      renderVerdict('pass', '通过 —— ' + (r.firstTime ? '首次通关' : '重复通关（同一关只计一次）'), verdict, ref.result.columns);
     } else {
-      var w = L.recordWrong(state, q.id);
+      L.recordWrong(state, q.id);
       saveProgress();
+      /* 判错自动解锁下一条提示（渐进，不一次甩全） */
       var hintList = hintTexts(q);
       var before = state.hintSeen[q.id] || 0;
-      if (before < hintList.length) {
-        state.hintSeen[q.id] = before + 1;   // 判错自动解锁下一条提示（渐进，不一次甩全）
-        saveProgress();
-      }
+      if (before < hintList.length) { state.hintSeen[q.id] = before + 1; saveProgress(); }
       renderHints(q);
-      var note2 = w.reset
-        ? '休息一下，本关重新开始（心已回满，已通过的关不受影响）。错题已记入错题本。'
-        : '不通过，扣 1 颗心，还剩 ' + w.hearts + ' 颗。错题已记入错题本。';
-      renderVerdict('fail', '未通过 —— ' + note2, verdict, ref.result.columns);
+      renderVerdict('fail', '未通过 —— 结果与预期不一致，已记入错题本；练习不扣分，看提示后重试即可。', verdict, ref.result.columns);
     }
     renderStats();
     renderNav();
@@ -589,7 +835,7 @@
   }
 
   /* ------------------------------ 编辑器字段补全 ------------------------------ */
-  /* 补全口径：token 以 HR_ 开头（或含下划线）→ 补表名；其余情况 → 补「SQL 里已出现的表」
+  /* 补全口径：token 以 HR_ 开头（或含下划线）-> 补表名；其余情况 -> 补「SQL 里已出现的表」
      的字段名，没出现过表名时回退到本题涉及表的字段名。不弹出任何数据行。 */
   function sqlSuggestions(text, caret) {
     if (!T) return [];
@@ -663,6 +909,22 @@
     ta.focus();
   }
 
+  /* ------------------------------ 筛选 ------------------------------ */
+  function clearFilters() {
+    filter.kw = '';
+    filter.diffs = {};
+    filter.undoneOnly = false;
+    var rs = $('rail-search');
+    if (rs) rs.value = '';
+    var diffBox = $('filter-diff');
+    if (diffBox) {
+      [].forEach.call(diffBox.querySelectorAll('input'), function (i) { i.checked = false; });
+    }
+    var undo = $('filter-undone');
+    if (undo) undo.checked = false;
+    renderNav();
+  }
+
   /* ------------------------------ 事件绑定 ------------------------------ */
   function bindUi() {
     $('btn-hint').addEventListener('click', revealNextHint);
@@ -671,39 +933,99 @@
     $('btn-answer').addEventListener('click', doAnswer);
 
     var sqlInput = $('sql-input');
-    /* Tab 插入两个空格，不把焦点跳走（键盘用户友好；任务卡 §4.3） */
+    /* Tab 插入两个空格，不把焦点跳走（键盘用户友好） */
     sqlInput.addEventListener('keydown', function (e) {
-      if (e.key !== 'Tab') return;
-      e.preventDefault();
-      var s = this.selectionStart;
-      var t = this.selectionEnd;
-      this.value = this.value.slice(0, s) + '  ' + this.value.slice(t);
-      this.selectionStart = this.selectionEnd = s + 2;
-      onSqlEdit();
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var s = this.selectionStart;
+        var t = this.selectionEnd;
+        this.value = this.value.slice(0, s) + '  ' + this.value.slice(t);
+        this.selectionStart = this.selectionEnd = s + 2;
+        onSqlEdit();
+        return;
+      }
+      /* Ctrl / Cmd + Enter 运行 */
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doRun(); return; }
+      if (e.key === 'Escape') hideSuggest();
     });
     sqlInput.addEventListener('input', onSqlEdit);
     sqlInput.addEventListener('blur', function () { hideSuggest(); });
-    sqlInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') hideSuggest();
-    });
-    bindSidebarTabs();
 
-    $('btn-drawer').addEventListener('click', function () {
-      var sb = document.querySelector('.sidebar');
-      var collapsed = sb.classList.toggle('collapsed');
-      this.textContent = collapsed ? '展开' : '收起';
-      this.setAttribute('aria-expanded', String(!collapsed));
+    /* 左栏：搜索 + 筛选 popover */
+    var rs = $('rail-search');
+    if (rs) rs.addEventListener('input', function () { filter.kw = this.value; renderNav(); });
+
+    var bf = $('btn-filter'), pop = $('filter-pop');
+    if (bf && pop) {
+      bf.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var willOpen = pop.hidden;
+        pop.hidden = !willOpen;
+        bf.setAttribute('aria-expanded', String(willOpen));
+      });
+      document.addEventListener('click', function (e) {
+        if (!pop.hidden && e.target !== bf && !pop.contains(e.target)) {
+          pop.hidden = true;
+          bf.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+    var diffBox = $('filter-diff');
+    if (diffBox) {
+      diffBox.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t && t.dataset && t.dataset.diff) { filter.diffs[t.dataset.diff] = t.checked; renderNav(); }
+      });
+    }
+    var undo = $('filter-undone');
+    if (undo) undo.addEventListener('change', function () { filter.undoneOnly = this.checked; renderNav(); });
+    var clr = $('btn-filter-clear');
+    if (clr) clr.addEventListener('click', clearFilters);
+
+    /* 右侧抽屉 */
+    $('btn-tables-drawer').addEventListener('click', function () { openDrawer('tables'); });
+    $('btn-dialect-drawer').addEventListener('click', function () { openDrawer('dialect'); });
+    $('drawer-close').addEventListener('click', closePanel);
+    $('scrim').addEventListener('click', closePanel);
+    $('tab-tables').addEventListener('click', function () { setDrawerTab('tables'); });
+    $('tab-dialect').addEventListener('click', function () { setDrawerTab('dialect'); });
+    var ts = $('tables-search');
+    if (ts) ts.addEventListener('input', function () { renderTablesPanel(this.value); });
+    renderTablesPanel('');
+
+    /* 涉及的表 / 字段：可展开 */
+    var tth = $('tables-toggle-head');
+    if (tth) {
+      tth.addEventListener('click', toggleQuestionTables);
+      tth.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleQuestionTables(); }
+      });
+    }
+
+    /* 结果区 tab */
+    var tm = $('tab-mine'), tr = $('tab-ref');
+    if (tm) tm.addEventListener('click', function () { showResultTab('mine'); });
+    if (tr) tr.addEventListener('click', function () { showResultTab('ref'); });
+
+    /* 窄屏：左栏抽屉 */
+    var br = $('btn-rail');
+    if (br) br.addEventListener('click', function () { if (openPanel === 'rail') closePanel(); else openRail(); });
+
+    /* Esc 关闭浮层 */
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && openPanel) closePanel();
     });
 
     $('btn-reset').addEventListener('click', function () {
-      if (!window.confirm('确定重置全部进度？XP / 通过记录 / 错题本 / 今日计数 / 已写 SQL 全部清空。')) return;
+      if (!window.confirm('确定重置全部进度？通过记录 / 错题本 / 已写 SQL 全部清空。')) return;
       if (!window.confirm('再确认一次：此操作不可撤销。')) return;
       state = L.freshState();
       L.ensureDay(state, L.todayStamp());
       saveProgress();
       refCache = {};
-      openSections = {};
+      lastRun = null;
       currentId = null;
+      closePanel();
       renderNav();
       renderStats();
       renderDetail();
@@ -750,6 +1072,8 @@
       showBanner('load-banner', '');
       db = r.db;
       dbReady = true;
+      /* 库就绪后补渲染一次码值对照：首屏渲染时库还没建好，查不了 HR_DICT。 */
+      renderDictHints(currentQuestion());
       /* 11 表行数对不上：页面红条提示，而不是白屏。 */
       if (!r.selfCheck.ok) {
         showBanner('selfcheck-banner', '库自检失败（' + r.selfCheck.okCount + '/' + r.selfCheck.total + ' 表不符）：' +

@@ -3,138 +3,180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DB Quest v2 · HR 语境 SQL 闯关（离线单文件）</title>
+<title>HR 语境 SQL 练习台 · 离线单文件</title>
 <style>
 /*__HR_STYLE__*/
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <span class="logo">DB Quest</span>
-    <span class="sub">HR 语境 SQL 闯关 · v2</span>
-  </div>
-  <div class="stats">
-    <span id="stat-stage" class="stat">第1段 0/5</span>
-    <span id="stat-xp" class="stat">XP 0</span>
-    <span id="stat-hearts" class="stat hearts" title="本关剩余尝试次数">❤❤❤</span>
-    <span id="stat-streak" class="stat" title="连续一次就过">🔥0</span>
-    <span id="stat-goal" class="stat goal">今日 0/3</span>
-    <button id="btn-reset" type="button" class="ghost">重置全部进度</button>
+  <div class="brand">HR 语境 SQL 练习台<small>题库 v1.0 · 20 题</small></div>
+  <div class="topbar-right">
+    <button id="btn-rail" type="button" class="btn ghost sm rail-btn" aria-controls="rail">题号</button>
+    <span id="stat-stage" class="progress-text">第 1 段 · 已完成 0/5</span>
+    <span class="bar"><i id="stat-bar"></i></span>
+    <button id="btn-tables-drawer" type="button" class="btn ghost sm">表结构</button>
+    <button id="btn-dialect-drawer" type="button" class="btn ghost sm">方言对照</button>
+    <button id="btn-reset" type="button" class="link-btn">重置进度</button>
   </div>
 </header>
 
-<div id="load-banner" class="banner" hidden></div>
-<div id="selfcheck-banner" class="banner banner-error" hidden></div>
-
-<!-- 首屏常驻方言差异（任务卡要求：不许藏进折叠区） -->
-<div class="dialect-strip">
-  <strong>方言对照（常驻）</strong>
-  <span class="ds-item">网页引擎 = <code>SQLite</code>；权威源 = SQL Server</span>
-  <span class="ds-item"><code>TOP n</code> → <code>LIMIT n</code></span>
-  <span class="ds-item"><code>GETDATE()</code> 禁用，基准日写死 <code>2026-06-30</code></span>
-  <span class="ds-item"><code>dbo.</code> 前缀 → 去掉</span>
-  <span class="ds-item"><code>ISNULL(a,b)</code> → <code>IFNULL/COALESCE</code></span>
-  <span class="ds-item">拼串 <code>+</code> → <code>||</code>（<code>+</code> 会静默得 0）</span>
-  <span class="ds-item"><code>IDENTITY</code> → <code>AUTOINCREMENT</code></span>
-  <span class="ds-item"><code>NVARCHAR</code> → <code>TEXT</code></span>
-  <span class="ds-item">裸 <code>=</code> 忽略大小写 → 逐字精确，需 <code>UPPER/TRIM/LIKE</code></span>
-  <span class="ds-item">日期按 ISO 文本 <code>YYYY-MM-DD</code> 直接比</span>
-</div>
+<div id="load-banner" class="banner" hidden=""></div>
+<div id="selfcheck-banner" class="banner banner-error" hidden=""></div>
 
 <main class="layout">
-  <aside class="sidebar">
-    <div class="sidebar-head">
-      <div class="sidebar-tabs" role="tablist">
-        <button id="tab-levels" type="button" class="tab is-active" role="tab" aria-selected="true">关卡主线</button>
-        <button id="tab-tables" type="button" class="tab" role="tab" aria-selected="false">表结构</button>
+  <aside class="rail" id="rail">
+    <div class="rail-top">
+      <label class="field">
+        <input id="rail-search" type="search" placeholder="搜索题号 / 关键词" autocomplete="off"/>
+      </label>
+      <button id="btn-filter" type="button" class="icon-btn" title="筛选：难度 / 状态" aria-expanded="false">筛选</button>
+    </div>
+    <div id="filter-pop" class="popover" hidden="">
+      <div class="pop-title">难度</div>
+      <div class="pop-row" id="filter-diff">
+        <label class="chk"><input type="checkbox" data-diff="1"/>L1</label>
+        <label class="chk"><input type="checkbox" data-diff="2"/>L2</label>
+        <label class="chk"><input type="checkbox" data-diff="3"/>L3</label>
+        <label class="chk"><input type="checkbox" data-diff="4"/>L4</label>
       </div>
-      <button id="btn-drawer" type="button" class="ghost drawer-btn" aria-expanded="true">收起</button>
+      <div class="pop-title">状态</div>
+      <div class="pop-row">
+        <label class="chk"><input type="checkbox" id="filter-undone"/>只看未通过</label>
+      </div>
+      <button id="btn-filter-clear" type="button" class="link-btn">清空筛选</button>
     </div>
-    <div id="panel-levels">
-      <nav id="section-nav" class="section-nav"></nav>
-      <p class="sidebar-foot">四段主线，关卡可任意点击跳转，不锁顺序。</p>
-    </div>
-    <div id="panel-tables" class="tables-panel" hidden>
-      <input id="tables-search" type="search" class="tables-search" placeholder="搜索表名 / 字段名，如 HR_EMPLOYEE、NetPay" autocomplete="off">
-      <p class="note tables-hint">11 张表 + 3 个视图，只列结构，不含任何数据行。</p>
-      <div id="tables-list" class="tables-list"></div>
-    </div>
+    <nav id="section-nav" class="qlist"></nav>
+    <div class="rail-foot">四段主线 · 关卡可任意跳转，不锁顺序</div>
   </aside>
 
   <section class="detail">
     <div id="detail-empty" class="empty">从左侧选一关开始闯关。</div>
 
-    <div id="detail-body" hidden>
-      <div class="level-head">
-        <h2 id="q-title"></h2>
-        <div class="level-hearts" id="q-hearts"></div>
-      </div>
-      <div class="meta" id="q-meta"></div>
-
-      <div class="principle">
-        <div class="principle-label">原理 / 考点提示</div>
-        <div id="q-principle"></div>
-      </div>
-
-      <div id="ref-review-block" class="warn" hidden></div>
-
-      <div id="q-tables-block" class="q-tables" hidden>
-        <div class="q-tables-label">涉及的表 / 字段 <span class="note">点表名展开字段清单；只给结构，不含数据行</span></div>
-        <div id="q-tables" class="q-tables-list"></div>
-      </div>
-
-      <h3>任务描述</h3>
-      <p id="q-stem" class="stem"></p>
-      <p id="q-requirement" class="req"></p>
-      <p id="q-output" class="note"></p>
-
-      <div class="hint-box">
-        <div class="hint-head">
-          <span>渐进提示 <span id="hint-counter" class="note"></span></span>
-          <button id="btn-hint" type="button">再看一条</button>
+    <div id="detail-body" hidden="">
+      <section class="card">
+        <div class="qhead">
+          <h3 id="q-title"></h3>
+          <span class="chip" id="q-level"></span>
         </div>
-        <ul id="hint-list" class="hint-list"></ul>
-        <div id="hint-empty" class="note">判错会自动解锁下一条提示；也可以手动逐条看。</div>
-      </div>
+        <p class="metaline" id="q-meta"></p>
 
-      <h3>你的 SQL</h3>
-      <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
-      <div id="sql-suggest" class="sql-suggest" hidden></div>
-      <div id="forbidden-warning" class="warn" hidden></div>
-      <div class="actions">
-        <button id="btn-run" type="button">运行</button>
-        <button id="btn-judge" type="button" class="primary">判题</button>
-        <button id="btn-answer" type="button">查看答案</button>
-      </div>
+        <div class="note" id="principle-box">
+          <b>考点提示</b>
+          <div id="q-principle"></div>
+        </div>
 
-      <div id="verdict" class="verdict" hidden></div>
+        <div id="ref-review-block" class="card-note is-warn" hidden=""></div>
 
-      <div id="result-block" hidden>
-        <h3>运行结果</h3>
-        <div id="result-note" class="note"></div>
+        <div id="tables-toggle" class="tables">
+          <div class="th" id="tables-toggle-head" role="button" tabindex="0" aria-expanded="false">
+            <span>涉及的表 / 字段</span>
+            <span class="caret" id="q-tables-caret"></span>
+            <span class="cap" id="q-tables-cap">只给结构，不含数据行</span>
+          </div>
+          <div class="body" id="q-tables-body" hidden="">
+            <div id="q-tables" class="q-tables-list"></div>
+          </div>
+        </div>
+
+        <div id="q-dict-hints" class="q-dict-hints" hidden=""></div>
+
+        <div class="task">
+          <b>任务描述</b>
+          <p id="q-stem" class="stem"></p>
+          <p id="q-requirement" class="req"></p>
+          <p id="q-output" class="muted"></p>
+        </div>
+
+        <div class="hint-box">
+          <div class="hint-head">
+            <span>渐进提示</span>
+            <button id="btn-hint" type="button" class="btn ghost sm">看下一条提示（0/1）</button>
+          </div>
+          <ul id="hint-list" class="hint-list"></ul>
+          <div id="hint-empty" class="muted">判错会自动解锁下一条提示；也可以手动逐条看。</div>
+        </div>
+
+        <div class="editor">
+          <div class="bar2"><b>SQL 编辑器</b><span class="kbd">Ctrl/⌘ + Enter 运行</span></div>
+          <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
+        </div>
+        <div id="sql-suggest" class="sql-suggest" hidden=""></div>
+        <div id="forbidden-warning" class="card-note is-warn" hidden=""></div>
+
+        <div class="actions">
+          <button id="btn-run" type="button" class="btn primary">运行</button>
+          <button id="btn-judge" type="button" class="btn dark">判题</button>
+          <button id="btn-answer" type="button" class="btn ghost">查看答案</button>
+          <span class="hint" id="run-hint"></span>
+        </div>
+
+        <div id="verdict" class="card-note" hidden=""></div>
+      </section>
+
+      <section class="card" id="result-block" hidden="">
+        <div class="tabs">
+          <button id="tab-mine" type="button" class="on">我的结果</button>
+          <button id="tab-ref" type="button">预期结果</button>
+        </div>
+        <div id="result-note" class="muted result-note"></div>
         <div class="tablewrap"><table id="result-table"></table></div>
-      </div>
+      </section>
 
-      <div id="answer-block" hidden>
+      <section class="card" id="answer-block" hidden="">
         <h3>参考答案</h3>
-        <p class="note" id="answer-note"></p>
-        <h4>SQL Server 权威写法 <code>reference_sql</code>（仅展示，不执行）</h4>
+        <p class="muted" id="answer-note"></p>
+        <h4>SQL Server 权威写法（仅展示，不执行）</h4>
         <pre id="answer-mssql"></pre>
-        <h4>SQLite 网页可跑写法 <code>reference_sql_sqlite</code>（判题用它算预期结果）</h4>
+        <h4>SQLite 网页可跑写法（判题用它算预期结果）</h4>
         <pre id="answer-sqlite"></pre>
-      </div>
+      </section>
 
-      <div id="post-pass-block" hidden>
+      <section class="card" id="post-pass-block" hidden="">
+        <div class="badge-ok" id="pass-badge">第 1 段通关</div>
         <h3>过关解锁</h3>
         <h4>易错点 pitfalls</h4>
         <ul id="q-pitfalls"></ul>
-        <h4>本题方言提示 dialect_note</h4>
+        <h4>本题方言提示</h4>
         <p id="q-dialect"></p>
-      </div>
+      </section>
     </div>
   </section>
 </main>
+
+<div id="scrim" class="scrim" hidden=""></div>
+<aside id="drawer" class="drawer" hidden="" aria-hidden="true">
+  <div class="dh">
+    <div class="drawer-tabs" role="tablist">
+      <button id="tab-tables" type="button" class="dtab on" role="tab" aria-selected="true">表结构</button>
+      <button id="tab-dialect" type="button" class="dtab" role="tab" aria-selected="false">方言对照</button>
+    </div>
+    <span class="esc">Esc 关闭</span>
+    <button id="drawer-close" type="button" class="icon-btn" title="关闭">关闭</button>
+  </div>
+  <div class="dbody">
+    <div id="panel-tables" class="tables-panel">
+      <ul class="panel-meta"><li>11 张表 + 3 个视图</li><li>只列结构，不含数据行</li><li>行数为全表行数，不是你本题的答案行数</li></ul>
+      <input id="tables-search" type="search" class="tables-search" placeholder="搜索表名 / 字段名，如 HR_EMPLOYEE、NetPay" autocomplete="off"/>
+      <div id="tables-list" class="tables-list"></div>
+    </div>
+    <div id="panel-dialect" class="tables-panel" hidden="">
+      <dl class="dict">
+        <dt>网页引擎</dt><dd>SQLite（权威源 = SQL Server）</dd>
+        <dt>TOP n</dt><dd>→ LIMIT n</dd>
+        <dt>GETDATE()</dt><dd>禁用；基准日写死 2026-06-30</dd>
+        <dt>dbo. 前缀</dt><dd>去掉</dd>
+        <dt>ISNULL(a,b)</dt><dd>→ IFNULL / COALESCE</dd>
+        <dt>拼串 +</dt><dd>→ ||（+ 会静默得 0）</dd>
+        <dt>IDENTITY</dt><dd>→ AUTOINCREMENT</dd>
+        <dt>NVARCHAR</dt><dd>→ TEXT</dd>
+        <dt>裸 = 忽略大小写</dt><dd>→ 逐字精确，需 UPPER / TRIM / LIKE</dd>
+        <dt>日期</dt><dd>按 ISO 文本 YYYY-MM-DD 直接比</dd>
+      </dl>
+      <div class="redline">红线：表结构只列结构，不含任何数据行。不得提供「看看真实数据」入口。</div>
+    </div>
+  </div>
+</aside>
 
 <footer class="foot">
   题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，关卡编排在 <code>src/levels.js</code>，
