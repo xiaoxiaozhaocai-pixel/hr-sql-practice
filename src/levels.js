@@ -1023,6 +1023,40 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 语法卡阅读状态（T20 C 单）—— 只记阅读，不动 XP / 尝试 / 今日目标
+   * ------------------------------------------------------------------ */
+
+  function syntaxKey(syntax) {
+    return (typeof syntax === 'string') ? syntax.trim() : '';
+  }
+
+  /**
+   * 标记某条语法已看过。幂等：已记录则保留首次日期原样返回 false。
+   * 只写 learning.syntaxSeen，不碰 XP / passed / review / attempts / 今日目标 / goalCelebrated。
+   * @returns {boolean} true = 本次写入；false = 无有效 key 或此前已记录
+   */
+  function markSyntaxSeen(state, syntax, dateStr) {
+    if (!state) return false;
+    var key = syntaxKey(syntax);
+    if (!key) return false;
+    ensureLearning(state);
+    if (!plainObject(state.learning.syntaxSeen)) state.learning.syntaxSeen = {};
+    var map = state.learning.syntaxSeen;
+    if (typeof map[key] === 'string' && map[key]) return false;
+    map[key] = str(dateStr, '') || todayStamp();
+    return true;
+  }
+
+  /* 该语法是否已看过（空 key / 未记录一律 false）。 */
+  function isSyntaxSeen(state, syntax) {
+    var key = syntaxKey(syntax);
+    if (!key || !state || !plainObject(state.learning)) return false;
+    var map = state.learning.syntaxSeen;
+    if (!plainObject(map)) return false;
+    return typeof map[key] === 'string' && !!map[key];
+  }
+
+  /* ------------------------------------------------------------------ *
    * 兼容包装（旧签名 / 旧返回值保持可用，内部走同一套新规则）
    * ------------------------------------------------------------------ */
 
@@ -1147,6 +1181,8 @@
     buildSections: buildSections,
     validSyntaxItem: validSyntaxItem,
     syntaxIntrosFor: syntaxIntrosFor,
+    markSyntaxSeen: markSyntaxSeen,
+    isSyntaxSeen: isSyntaxSeen,
     hintList: hintList,
     freshState: freshState,
     normalizeState: normalizeState,

@@ -209,6 +209,8 @@ button { font: inherit; cursor: pointer; }
 .q-syntax .syntax-name { font-weight: 600; color: var(--ink); margin-bottom: 6px; }
 .q-syntax .syntax-row { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
 .q-syntax .syntax-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); white-space: pre-wrap; }
+.q-syntax .syntax-body[hidden] { display: none; }
+.q-syntax .syntax-actions { margin-top: 8px; }
 
 /* 任务描述 */
 .task { margin-top: 16px; font-size: 14px; line-height: 1.5; color: var(--ink); }

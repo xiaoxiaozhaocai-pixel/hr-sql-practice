@@ -337,7 +337,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "IS NULL",
+          "what": "判断空值",
+          "when": "= NULL 永远查不到；空值必须用 IS NULL／IS NOT NULL",
+          "example": "WHERE TermDate IS NULL",
+          "misuse": "写成 = NULL 查不到任何行；空值必须用 IS NULL／IS NOT NULL。"
+        }
+      ]
     },
     {
       "id": "q002",
@@ -395,7 +404,23 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "AND / OR 优先级",
+          "what": "多条件组合",
+          "when": "AND 先于 OR；混用必须加括号",
+          "example": "WHERE IsActive=1 AND (Code='A' OR Code='B')",
+          "misuse": "混用 AND／OR 却不加括号：OR 的条件被 AND 抢先结合，筛选结果与预期不符。"
+        },
+        {
+          "syntax": "COUNT(*) / COUNT(列)",
+          "what": "数行 vs 数非空",
+          "when": "COUNT(列) 跳过空值，COUNT(*) 不跳",
+          "example": "COUNT(BirthDate)",
+          "misuse": "想数总行数却写了 COUNT(某列)：该列有 NULL 时结果偏小，数行要用 COUNT(*)。"
+        }
+      ]
     },
     {
       "id": "q003",
@@ -654,7 +679,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "ORDER BY 多键",
+          "what": "排序",
+          "when": "多列逐列生效；字符型编码与数值排序不同",
+          "example": "ORDER BY OrgID, OrgCode",
+          "misuse": "把字符型编码直接排序：'10' 会排在 '2' 前面，数值顺序出错。"
+        }
+      ]
     },
     {
       "id": "q004",
@@ -712,7 +746,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "BETWEEN",
+          "what": "闭区间",
+          "when": "含两端；日期带时间时上界要小心",
+          "example": "StartDate BETWEEN '2026-01-01' AND '2026-06-30'",
+          "misuse": "以为上界不含：日期带时间时，上界当天会被漏掉。"
+        }
+      ]
     },
     {
       "id": "q005",
@@ -770,7 +813,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "IN 列表",
+          "what": "枚举匹配",
+          "when": "列表里不能有 NULL，否则 NOT IN 恒空",
+          "example": "Code IN ('A','B')",
+          "misuse": "在 NOT IN 列表里写进 NULL：整个条件恒空，一行都查不到。"
+        }
+      ]
     },
     {
       "id": "q006",
@@ -1105,7 +1157,30 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 2
+      "section": 2,
+      "syntax_intro": [
+        {
+          "syntax": "GROUP BY",
+          "what": "分组",
+          "when": "一人一行／一组一行时用；SELECT 里只能出现分组列＋聚合",
+          "example": "GROUP BY EmpNo",
+          "misuse": "SELECT 里放了非分组列：既不在 GROUP BY 也不在聚合函数里，直接报错。"
+        },
+        {
+          "syntax": "HAVING",
+          "what": "分组后筛选",
+          "when": "条件是组级的；行级条件仍归 WHERE",
+          "example": "HAVING COUNT(*)>=2",
+          "misuse": "写成 WHERE COUNT(*)>=2：会报错，因为 WHERE 跑在 GROUP BY 之前，组级条件要用 HAVING。"
+        },
+        {
+          "syntax": "JOIN … ON",
+          "what": "两表按键缝合",
+          "when": "需要另一张表的列时才用；关联键要唯一，否则行数翻倍",
+          "example": "JOIN HR_EMPLOYEE e ON e.EmpNo=a.EmpNo",
+          "misuse": "关联键不唯一就直接 JOIN：一对多让行数翻倍，聚合结果被放大。"
+        }
+      ]
     },
     {
       "id": "q008",
@@ -1420,7 +1495,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 2
+      "section": 2,
+      "syntax_intro": [
+        {
+          "syntax": "SUM/AVG/MIN/MAX",
+          "what": "聚合函数",
+          "when": "与 GROUP BY 搭配；AVG 忽略空值，跨币种不能直接平均",
+          "example": "AVG(NetPay)",
+          "misuse": "跨币种直接 AVG：不同币种金额混在一起平均，数值没有意义。"
+        }
+      ]
     },
     {
       "id": "q011",
@@ -1629,7 +1713,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 3
+      "section": 3,
+      "syntax_intro": [
+        {
+          "syntax": "视图 V_*",
+          "what": "预置视图",
+          "when": "视图已封装口径（仅主职、当前有效等），先看它封了什么",
+          "example": "SELECT * FROM V_ORG_HEADCOUNT",
+          "misuse": "不看视图封装的口径就再叠一层筛选：口径重复或冲突，数字对不上。"
+        }
+      ]
     },
     {
       "id": "q014",
@@ -1718,7 +1811,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 3
+      "section": 3,
+      "syntax_intro": [
+        {
+          "syntax": "EXISTS / NOT EXISTS",
+          "what": "存在性判断",
+          "when": "只问\"有没有\"；比 NOT IN 安全（不受 NULL 影响）",
+          "example": "WHERE NOT EXISTS (SELECT 1 FROM …)",
+          "misuse": "用 NOT IN 代替 NOT EXISTS：子查询里出现 NULL 时结果恒空。"
+        }
+      ]
     },
     {
       "id": "q015",
@@ -1856,7 +1958,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 3
+      "section": 3,
+      "syntax_intro": [
+        {
+          "syntax": "派生表 FROM (SELECT …) t",
+          "what": "把查询当表",
+          "when": "需要用\"已聚合的结果\"再筛/再连；必须起别名",
+          "example": "FROM (SELECT EmpNo,SUM(…) s FROM …) t",
+          "misuse": "派生表不起别名：SQL 报错，子查询结果无法被引用。"
+        }
+      ]
     },
     {
       "id": "q017",
@@ -2235,7 +2346,23 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-09",
-      "section": 3
+      "section": 3,
+      "syntax_intro": [
+        {
+          "syntax": "窗口 OVER (…)",
+          "what": "不合并行的计算",
+          "when": "要保留每一行同时算排名/累计/占比；GROUP BY 会合并行",
+          "example": "ROW_NUMBER() OVER (PARTITION BY … ORDER BY …)",
+          "misuse": "想保留明细却用 GROUP BY：行被合并、明细消失，这类计算要用窗口函数。"
+        },
+        {
+          "syntax": "ROW_NUMBER / RANK",
+          "what": "排名与取最新",
+          "when": "取\"每人最新一段/前 N 名\"；RANK 并列跳号",
+          "example": "rn = 1",
+          "misuse": "用 RANK 取\"每人第一条\"：并列时会跳号，取不到唯一一行，要唯一序用 ROW_NUMBER。"
+        }
+      ]
     },
     {
       "id": "q019",
@@ -2938,7 +3065,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 2,
-      "expected_note": "结果规模：共 23 行"
+      "expected_note": "结果规模：共 23 行",
+      "syntax_intro": [
+        {
+          "syntax": "LEFT JOIN",
+          "what": "保留左表全部",
+          "when": "要\"没有也要列出来\"时用；右表列用 COALESCE 兜空",
+          "example": "LEFT JOIN … ON …",
+          "misuse": "该用 LEFT JOIN 却写成 INNER JOIN：右表没匹配的行整行消失，\"没有也要列出来\"落空。"
+        }
+      ]
     },
     {
       "id": "q024",
@@ -4383,7 +4519,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 3,
-      "expected_note": "结果规模：共 3 行"
+      "expected_note": "结果规模：共 3 行",
+      "syntax_intro": [
+        {
+          "syntax": "UNION / UNION ALL",
+          "what": "纵向拼接",
+          "when": "两边列数、类型要一致；UNION 去重更慢",
+          "example": "SELECT … UNION ALL SELECT …",
+          "misuse": "两边列数或类型不一致：直接报错；该去重时却用 UNION ALL，结果多出重复行。"
+        }
+      ]
     },
     {
       "id": "q037",
@@ -4854,7 +4999,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 3,
-      "expected_note": "结果规模：共 170 行"
+      "expected_note": "结果规模：共 170 行",
+      "syntax_intro": [
+        {
+          "syntax": "子查询（IN (…)／= (…)）",
+          "what": "把查询结果当条件",
+          "when": "先算出一组值/一个值再筛；标量子查询只能返回 1 行 1 列",
+          "example": "WHERE OrgID IN (SELECT OrgID FROM …)",
+          "misuse": "标量子查询返回多行多列：= (SELECT …) 直接报错，要么改 IN，要么收敛到 1 行 1 列。"
+        }
+      ]
     },
     {
       "id": "q040",
@@ -5024,7 +5178,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 3,
-      "expected_note": "结果规模：共 11 行"
+      "expected_note": "结果规模：共 11 行",
+      "syntax_intro": [
+        {
+          "syntax": "EXCEPT",
+          "what": "差集",
+          "when": "\"在 A 不在 B\"",
+          "example": "SELECT … EXCEPT SELECT …",
+          "misuse": "把 EXCEPT 当交集用：它给的是\"在 A 不在 B\"，与\"两边都有\"正好相反。"
+        }
+      ]
     },
     {
       "id": "q042",
@@ -5524,7 +5687,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 3,
-      "expected_note": "正确答案 138"
+      "expected_note": "正确答案 138",
+      "syntax_intro": [
+        {
+          "syntax": "INTERSECT",
+          "what": "交集",
+          "when": "\"两边都有\"",
+          "example": "SELECT … INTERSECT SELECT …",
+          "misuse": "把 INTERSECT 当差集用：交集只留两边都有的行，会漏掉只在一边的记录。"
+        }
+      ]
     },
     {
       "id": "q047",
@@ -7184,7 +7356,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 4,
-      "expected_note": "结果规模：共 27 行"
+      "expected_note": "结果规模：共 27 行",
+      "syntax_intro": [
+        {
+          "syntax": "递归 CTE",
+          "what": "层级展开",
+          "when": "组织树这类\"自己连自己\"的结构；要有终止条件",
+          "example": "WITH RECURSIVE t AS (… UNION ALL …)",
+          "misuse": "忘了终止条件：递归停不下来，或撞上递归层数上限。"
+        }
+      ]
     },
     {
       "id": "q056",
@@ -8090,7 +8271,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 4,
-      "expected_note": "结果规模：共 12 行"
+      "expected_note": "结果规模：共 12 行",
+      "syntax_intro": [
+        {
+          "syntax": "LAG / LEAD",
+          "what": "取上/下一行",
+          "when": "环比、同比、看前后变化；首行没有上一行，为 NULL",
+          "example": "LAG(金额) OVER (ORDER BY 月)",
+          "misuse": "忘了首行没有上一行：LAG 首行为 NULL，直接参与运算会得空值。"
+        }
+      ]
     },
     {
       "id": "q062",
@@ -8535,7 +8725,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 9 行"
+      "expected_note": "结果规模：共 9 行",
+      "syntax_intro": [
+        {
+          "syntax": "LIKE '%…%'",
+          "what": "模糊包含",
+          "when": "% 任意多字符、_ 恰好一个字符",
+          "example": "OrgName LIKE '%中心%'",
+          "misuse": "只写 LIKE '关键词' 不加 %：变成精确匹配，匹配不到包含项。"
+        }
+      ]
     },
     {
       "id": "q065",
@@ -8595,7 +8794,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-10",
-      "section": 1
+      "section": 1,
+      "syntax_intro": [
+        {
+          "syntax": "ESCAPE",
+          "what": "通配符转义",
+          "when": "要匹配字面的 _／% 时必须声明转义符",
+          "example": "LIKE '%\\_%' ESCAPE '\\'",
+          "misuse": "要匹配字面下划线却直接写 LIKE '%_%'：_ 被当通配符，多出大量无关行。"
+        }
+      ]
     },
     {
       "id": "q066",
@@ -8683,7 +8891,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 5 行"
+      "expected_note": "结果规模：共 5 行",
+      "syntax_intro": [
+        {
+          "syntax": "TRIM",
+          "what": "去首尾空格",
+          "when": "字典/导入数据常有尾空格，比较前先清洗",
+          "example": "TRIM(Title)='部门'",
+          "misuse": "比较前不清洗：尾空格让 '部门' 与 '部门 ' 不相等，看似相等的值筛不出来。"
+        }
+      ]
     },
     {
       "id": "q067",
@@ -8865,7 +9082,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 30 行"
+      "expected_note": "结果规模：共 30 行",
+      "syntax_intro": [
+        {
+          "syntax": "SUBSTR / LEFT",
+          "what": "截取子串",
+          "when": "位置从 1 开始（不是 0）",
+          "example": "SUBSTR(ReqNo,1,3)",
+          "misuse": "按 0 起算写 SUBSTR(x,0,3)：起点错位，截出来的字符整体偏移。"
+        }
+      ]
     },
     {
       "id": "q068",
@@ -9178,7 +9404,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 200 行"
+      "expected_note": "结果规模：共 200 行",
+      "syntax_intro": [
+        {
+          "syntax": "COALESCE / IFNULL",
+          "what": "空值替换显示",
+          "when": "只影响输出显示，不改筛选口径",
+          "example": "COALESCE(MajorName,'未登记')",
+          "misuse": "以为 COALESCE 会改筛选口径：它只改输出显示，WHERE 里的 NULL 判断仍要照写。"
+        }
+      ]
     },
     {
       "id": "q069",
@@ -9490,7 +9725,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 200 行"
+      "expected_note": "结果规模：共 200 行",
+      "syntax_intro": [
+        {
+          "syntax": "strftime / YEAR()",
+          "what": "取年月",
+          "when": "SQLite 用 strftime、SQL Server 用 YEAR()——方言不同",
+          "example": "strftime('%Y', HireDate)",
+          "misuse": "在 SQLite 里写 SQL Server 的 YEAR()（或反过来用 strftime）：函数不存在，直接报错。"
+        }
+      ]
     },
     {
       "id": "q070",
@@ -9595,7 +9839,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 15 行"
+      "expected_note": "结果规模：共 15 行",
+      "syntax_intro": [
+        {
+          "syntax": "DISTINCT",
+          "what": "整行去重",
+          "when": "只去重不算数；作用于整行",
+          "example": "SELECT DISTINCT SchoolName",
+          "misuse": "把 DISTINCT 当计数用：它只去重不计数，数不同值要用 COUNT(DISTINCT 列)。"
+        }
+      ]
     },
     {
       "id": "q071",
@@ -10021,7 +10274,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 200 行"
+      "expected_note": "结果规模：共 200 行",
+      "syntax_intro": [
+        {
+          "syntax": "CASE WHEN",
+          "what": "条件分档",
+          "when": "从上到下命中即停；边界必须写死",
+          "example": "CASE WHEN 工龄<=1 THEN '0-1年' ELSE '1年以上' END",
+          "misuse": "分档边界不写死：区间重叠或留空，同一行会落进错误的档。"
+        }
+      ]
     },
     {
       "id": "q073",
@@ -10103,7 +10365,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "结果规模：共 5 行"
+      "expected_note": "结果规模：共 5 行",
+      "syntax_intro": [
+        {
+          "syntax": "TOP / LIMIT",
+          "what": "取前 N",
+          "when": "必须配 ORDER BY；SQL Server TOP／SQLite LIMIT",
+          "example": "ORDER BY 实发 DESC LIMIT 5",
+          "misuse": "取前 N 不配 ORDER BY：返回哪几行不确定，结果每次可能不同。"
+        }
+      ]
     },
     {
       "id": "q074",
@@ -10367,7 +10638,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 1,
-      "expected_note": "正确答案 200 / 15"
+      "expected_note": "正确答案 200 / 15",
+      "syntax_intro": [
+        {
+          "syntax": "COUNT(DISTINCT)",
+          "what": "去重计数",
+          "when": "问\"多少个不同的 X\"用它",
+          "example": "COUNT(DISTINCT EmpNo)",
+          "misuse": "用 COUNT(列) 当去重计数：重复值被算多次，人数偏大。"
+        }
+      ]
     },
     {
       "id": "q078",
@@ -10534,7 +10814,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 5,
-      "expected_note": "结果规模：共 6 行"
+      "expected_note": "结果规模：共 6 行",
+      "syntax_intro": [
+        {
+          "syntax": "日期计算（EOMONTH/date）",
+          "what": "日期运算",
+          "when": "求月末、月份差、按月铺开；方言差异最大的一段",
+          "example": "date(StartDate,'start of month')",
+          "misuse": "照搬别的方言的日期函数：EOMONTH 与 date(…) 各属不同方言，混用直接报函数不存在。"
+        }
+      ]
     },
     {
       "id": "q080",
@@ -11030,7 +11319,16 @@
       "version": "1.0",
       "updated_at": "2026-10-10",
       "section": 5,
-      "expected_note": "结果规模：共 12 行"
+      "expected_note": "结果规模：共 12 行",
+      "syntax_intro": [
+        {
+          "syntax": "ROLLUP / GROUPING SETS",
+          "what": "小计与总计",
+          "when": "报表要\"明细＋小计＋合计\"；SQLite 用 UNION ALL 手拼",
+          "example": "GROUP BY ROLLUP(OrgName)",
+          "misuse": "在 SQLite 里直接用 ROLLUP：本引擎不认，要按口径用 UNION ALL 手拼。"
+        }
+      ]
     },
     {
       "id": "q085",
@@ -12705,7 +13003,16 @@
       "version": "1.0",
       "updated_at": "2026-10-11",
       "section": 6,
-      "expected_note": "结果规模：共 3 行"
+      "expected_note": "结果规模：共 3 行",
+      "syntax_intro": [
+        {
+          "syntax": "时点快照（在册口径）",
+          "what": "\"某时点谁在册\"＝入职 ≤ 时点 且（离职为空 或 离职 > 时点）",
+          "when": "时点口径必须写死；当天离职不计入",
+          "example": "HireDate<='2026-06-30' AND (TermDate IS NULL OR TermDate>'2026-06-30')",
+          "misuse": "把当天离职算进在册：离职日等于时点当天的不计入，条件要用 > 而不是 >=。"
+        }
+      ]
     },
     {
       "id": "q101",
@@ -12814,7 +13121,16 @@
       "version": "1.0",
       "updated_at": "2026-10-11",
       "section": 6,
-      "expected_note": "结果规模：共 12 行"
+      "expected_note": "结果规模：共 12 行",
+      "syntax_intro": [
+        {
+          "syntax": "递归 CTE 造日历/月份序列",
+          "what": "先造一张\"完整时间清单\"，再 LEFT JOIN 业务数据补 0",
+          "when": "\"没有数据的那一格也要出现\"时，必须先造骨架",
+          "example": "WITH RECURSIVE 月(n) AS (… UNION ALL …)",
+          "misuse": "不造时间骨架直接 GROUP BY：没有数据的那一格不会出现，报表月份缺行。"
+        }
+      ]
     },
     {
       "id": "q102",
@@ -12949,7 +13265,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-11",
-      "section": 6
+      "section": 6,
+      "syntax_intro": [
+        {
+          "syntax": "拉链式区间匹配",
+          "what": "用区间的起止去匹配\"当时有效\"的对象",
+          "when": "组织/岗位有 ValidFrom~ValidTo，历史属性不能用当前值代替",
+          "example": "ON 时点 BETWEEN ValidFrom AND COALESCE(ValidTo,'9999-12-31')",
+          "misuse": "用对象当前属性代替历史属性：时点报表会张冠李戴。"
+        }
+      ]
     },
     {
       "id": "q103",
@@ -13020,7 +13345,16 @@
       "version": "1.0",
       "updated_at": "2026-10-11",
       "section": 6,
-      "expected_note": "结果规模：共 3 行"
+      "expected_note": "结果规模：共 3 行",
+      "syntax_intro": [
+        {
+          "syntax": "区间三元分类",
+          "what": "相对基准日把任职段分成 在效/已结束/未开始",
+          "when": "端点归属要写清（= 基准日 归在效）",
+          "example": "CASE WHEN … END",
+          "misuse": "端点归属不写清：= 基准日的段既不算在效也不算已结束，三分类漏行或重行。"
+        }
+      ]
     },
     {
       "id": "q104",
@@ -13292,7 +13626,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-11",
-      "section": 6
+      "section": 6,
+      "syntax_intro": [
+        {
+          "syntax": "LAG + 日期差（断档/二次雇佣）",
+          "what": "相邻两段之间有没有空档",
+          "when": "判断\"连续在职\"、识别离职后再入职",
+          "example": "LAG(EndDate) OVER (PARTITION BY EmpNo ORDER BY StartDate)",
+          "misuse": "忘了在窗口里按时间排序：相邻关系错位，断档会漏判或误判。"
+        }
+      ]
     },
     {
       "id": "q105",
@@ -14142,7 +14485,16 @@
       "status": "ready",
       "version": "1.0",
       "updated_at": "2026-10-11",
-      "section": 6
+      "section": 6,
+      "syntax_intro": [
+        {
+          "syntax": "ROW_NUMBER 事件流水",
+          "what": "逐人事件按时间排号",
+          "when": "事件序列、取首末段",
+          "example": "ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY StartDate)",
+          "misuse": "忘记 PARTITION BY：编号跨人连续，取\"每人首段\"只会取到全表第一条。"
+        }
+      ]
     },
     {
       "id": "q109",
@@ -14282,7 +14634,16 @@
       "version": "1.0",
       "updated_at": "2026-10-11",
       "section": 6,
-      "expected_note": "正确答案 155 / 30 / 11 / 174 / 174"
+      "expected_note": "正确答案 155 / 30 / 11 / 174 / 174",
+      "syntax_intro": [
+        {
+          "syntax": "勾稽核对",
+          "what": "期初 ＋ 期间变动 ＝ 期末",
+          "when": "报表数字要自洽；对不上先查丢行/重复计数",
+          "example": "三个数凑一个等式",
+          "misuse": "只对期末数字、不做期初＋变动的勾稽：丢行或重复计数看不出来，报表对不上却找不到原因。"
+        }
+      ]
     },
     {
       "id": "q111",

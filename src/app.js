@@ -780,6 +780,59 @@
     });
   }
 
+  /* 单张语法卡：未确认时展示四要素 + 主按钮「已看过，开始尝试」；
+     已确认时收起为一行「语法回看」，可再展开看四要素。按钮与展开态都带 aria 属性。 */
+  function syntaxCardNode(c, i, qid) {
+    var card = el('div', null, 'syntax-card');
+    var bodyId = 'syntax-body-' + qid + '-' + i;
+    var seen = !!(L && state && typeof L.isSyntaxSeen === 'function' && L.isSyntaxSeen(state, c.syntax));
+
+    card.appendChild(el('div', c.syntax, 'syntax-name'));
+
+    var body = el('div', null, 'syntax-body');
+    body.id = bodyId;
+    [['说明', c.what, ''], ['何时用', c.when, ''], ['示例', c.example, 'syntax-code'], ['常见误用', c.misuse, '']]
+      .forEach(function (pair) {
+        var row = el('div', null, 'syntax-row');
+        row.appendChild(el('b', pair[0] + '：'));
+        row.appendChild(el('span', pair[1], pair[2]));
+        body.appendChild(row);
+      });
+    card.appendChild(body);
+
+    var actions = el('div', null, 'syntax-actions');
+    if (seen) {
+      var toggle = el('button', '语法回看：' + c.syntax, 'link-btn syntax-review-toggle');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-controls', bodyId);
+      body.hidden = true;
+      toggle.addEventListener('click', function () {
+        var willOpen = body.hidden;
+        body.hidden = !willOpen;
+        toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      });
+      actions.appendChild(toggle);
+    } else {
+      var btn = el('button', '已看过，开始尝试', 'btn ghost sm btn-syntax-seen');
+      btn.type = 'button';
+      btn.setAttribute('aria-expanded', 'true');
+      btn.setAttribute('aria-controls', bodyId);
+      btn.addEventListener('click', function () {
+        /* 只记阅读状态并落盘：不加 XP、不计今日目标、不扣尝试次数 */
+        if (L && state) L.markSyntaxSeen(state, c.syntax, L.todayStamp());
+        saveProgress();
+        var fresh = syntaxCardNode(c, i, qid);
+        if (card.parentNode) card.parentNode.replaceChild(fresh, card);
+        announce('已记录看过语法：' + c.syntax);
+      });
+      actions.appendChild(btn);
+      body.hidden = false;
+    }
+    card.appendChild(actions);
+    return card;
+  }
+
   /* syntax_intro 首现卡片：SYNTAX_BY_ID 已按 section→seq 扫好，只渲染首现项；
      无有效卡片时整块隐藏（不出现空壳）。与题面同层，不放进任何折叠容器。 */
   function renderSyntaxCards(q) {
@@ -789,21 +842,24 @@
     host.hidden = true;
     var cards = q ? SYNTAX_BY_ID[q.id] : null;
     if (!cards || !cards.length) return;
-    cards.forEach(function (c) {
-      var card = el('div', null, 'syntax-card');
-      card.appendChild(el('div', c.syntax, 'syntax-name'));
-      var body = el('div', null, 'syntax-body');
-      [['说明', c.what, ''], ['何时用', c.when, ''], ['示例', c.example, 'syntax-code'], ['常见误用', c.misuse, '']]
-        .forEach(function (pair) {
-          var row = el('div', null, 'syntax-row');
-          row.appendChild(el('b', pair[0] + '：'));
-          row.appendChild(el('span', pair[1], pair[2]));
-          body.appendChild(row);
-        });
-      card.appendChild(body);
-      host.appendChild(card);
+    cards.forEach(function (c, i) {
+      host.appendChild(syntaxCardNode(c, i, q.id));
     });
     host.hidden = false;
+  }
+
+  /* 回看入口点「语法卡」时展开已收起的卡（不改阅读状态、不动首次教学卡按钮状态）。 */
+  function expandSyntaxCards() {
+    var host = $('q-syntax');
+    if (!host) return;
+    var bodies = host.querySelectorAll('.syntax-body');
+    for (var i = 0; i < bodies.length; i++) {
+      if (!bodies[i].hidden) continue;
+      bodies[i].hidden = false;
+      var card = bodies[i].parentNode;
+      var toggle = card ? card.querySelector('.syntax-review-toggle') : null;
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    }
   }
 
   function renderDictHints(q) {
@@ -1134,6 +1190,7 @@
       var b = el('button', t[0], 'link-btn');
       b.type = 'button';
       b.addEventListener('click', function () {
+        if (t[1] === 'q-syntax') expandSyntaxCards();
         node.scrollIntoView({ block: 'center' });
       });
       wrap.appendChild(b);
