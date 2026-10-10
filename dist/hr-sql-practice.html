@@ -82,6 +82,10 @@ button { font: inherit; cursor: pointer; }
 .progress-text { font-size: 12px; color: var(--ink-2); }
 .bar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.stat { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.stat-hearts { color: var(--accent); letter-spacing: 1px; }
+.stat-goal.is-met { color: var(--ok); font-weight: 600; }
+.level-hearts { font-size: 12px; color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
 
 /* ---------------------------- 横幅（与提示/警告/错误共用同一套卡片样式） ---------------------------- */
 .banner {
@@ -338,9 +342,13 @@ pre {
     <button id="btn-rail" type="button" class="btn ghost sm rail-btn" aria-controls="rail">题号</button>
     <span id="stat-stage" class="progress-text">第 1 段 · 已完成 0/5</span>
     <span class="bar"><i id="stat-bar"></i></span>
+    <span id="stat-xp" class="stat">XP 0</span>
+    <span id="stat-hearts" class="stat stat-hearts" title="本关剩余尝试次数"></span>
+    <span id="stat-streak" class="stat" title="连续一次就过"></span>
+    <span id="stat-goal" class="stat stat-goal">今日 0/3</span>
     <button id="btn-tables-drawer" type="button" class="btn ghost sm">表结构</button>
     <button id="btn-dialect-drawer" type="button" class="btn ghost sm">方言对照</button>
-    <button id="btn-reset" type="button" class="link-btn">重置进度</button>
+    <button id="btn-reset" type="button" class="link-btn">重置全部进度</button>
   </div>
 </header>
 
@@ -381,6 +389,7 @@ pre {
         <div class="qhead">
           <h3 id="q-title"></h3>
           <span class="chip" id="q-level"></span>
+          <span class="level-hearts" id="q-hearts"></span>
         </div>
         <p class="metaline" id="q-meta"></p>
 
@@ -1773,12 +1782,14 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return null;
   }
 
-  /* ------------------------------ 顶栏进度（唯一全屏游戏化指标） ------------------------------ */
+  /* ------------------------------ 顶栏统计：进度 + 游戏化指标 ------------------------------ */
   function currentSection() {
     var q = currentQuestion();
     if (q && SECTION_OF[q.id]) return SECTION_OF[q.id];
     return SECTIONS[0] || null;
   }
+
+  function repeats(ch, n) { var s = ''; for (var i = 0; i < n; i++) s += ch; return s; }
 
   function renderStats() {
     var sec = currentSection();
@@ -1791,6 +1802,21 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     if (bar && sec) {
       bar.style.width = (sec.questions.length ? Math.round(passedInSection(sec) / sec.questions.length * 100) : 0) + '%';
     }
+    /* 游戏化指标（设计意图，2026-10-10 恢复渲染层） */
+    var xp = $('stat-xp');
+    if (xp) xp.textContent = 'XP ' + state.xp;
+    var hearts = $('stat-hearts');
+    if (hearts) hearts.textContent = repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
+    var streak = $('stat-streak');
+    if (streak) streak.textContent = '\u{1F525}' + state.streak;
+    var goal = $('stat-goal');
+    if (goal) {
+      var met = L.goalMet(state);
+      goal.textContent = '今日 ' + Math.min(state.todayCount, state.dailyGoal) + '/' + state.dailyGoal + (met ? ' \u2713' : '');
+      goal.className = 'stat stat-goal' + (met ? ' is-met' : '');
+    }
+    var qh = $('q-hearts');
+    if (qh) qh.textContent = '本关心 ' + repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
   }
 
   /* ------------------------------ 左栏题号列表 ------------------------------ */

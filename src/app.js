@@ -132,12 +132,14 @@
     return null;
   }
 
-  /* ------------------------------ 顶栏进度（唯一全屏游戏化指标） ------------------------------ */
+  /* ------------------------------ 顶栏统计：进度 + 游戏化指标 ------------------------------ */
   function currentSection() {
     var q = currentQuestion();
     if (q && SECTION_OF[q.id]) return SECTION_OF[q.id];
     return SECTIONS[0] || null;
   }
+
+  function repeats(ch, n) { var s = ''; for (var i = 0; i < n; i++) s += ch; return s; }
 
   function renderStats() {
     var sec = currentSection();
@@ -150,6 +152,21 @@
     if (bar && sec) {
       bar.style.width = (sec.questions.length ? Math.round(passedInSection(sec) / sec.questions.length * 100) : 0) + '%';
     }
+    /* 游戏化指标（设计意图，2026-10-10 恢复渲染层） */
+    var xp = $('stat-xp');
+    if (xp) xp.textContent = 'XP ' + state.xp;
+    var hearts = $('stat-hearts');
+    if (hearts) hearts.textContent = repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
+    var streak = $('stat-streak');
+    if (streak) streak.textContent = '\u{1F525}' + state.streak;
+    var goal = $('stat-goal');
+    if (goal) {
+      var met = L.goalMet(state);
+      goal.textContent = '今日 ' + Math.min(state.todayCount, state.dailyGoal) + '/' + state.dailyGoal + (met ? ' \u2713' : '');
+      goal.className = 'stat stat-goal' + (met ? ' is-met' : '');
+    }
+    var qh = $('q-hearts');
+    if (qh) qh.textContent = '本关心 ' + repeats('\u2764', state.hearts) + repeats('\u{1F90D}', Math.max(0, L.HEARTS_PER_LEVEL - state.hearts));
   }
 
   /* ------------------------------ 左栏题号列表 ------------------------------ */

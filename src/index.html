@@ -15,9 +15,13 @@
     <button id="btn-rail" type="button" class="btn ghost sm rail-btn" aria-controls="rail">题号</button>
     <span id="stat-stage" class="progress-text">第 1 段 · 已完成 0/5</span>
     <span class="bar"><i id="stat-bar"></i></span>
+    <span id="stat-xp" class="stat">XP 0</span>
+    <span id="stat-hearts" class="stat stat-hearts" title="本关剩余尝试次数"></span>
+    <span id="stat-streak" class="stat" title="连续一次就过"></span>
+    <span id="stat-goal" class="stat stat-goal">今日 0/3</span>
     <button id="btn-tables-drawer" type="button" class="btn ghost sm">表结构</button>
     <button id="btn-dialect-drawer" type="button" class="btn ghost sm">方言对照</button>
-    <button id="btn-reset" type="button" class="link-btn">重置进度</button>
+    <button id="btn-reset" type="button" class="link-btn">重置全部进度</button>
   </div>
 </header>
 
@@ -58,6 +62,7 @@
         <div class="qhead">
           <h3 id="q-title"></h3>
           <span class="chip" id="q-level"></span>
+          <span class="level-hearts" id="q-hearts"></span>
         </div>
         <p class="metaline" id="q-meta"></p>
 
