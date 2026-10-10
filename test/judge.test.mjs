@@ -83,3 +83,13 @@ test('diff_rows_reported_and_capped_at_10', () => {
   assert.equal(v.diffRows.length, 10, '差异样例最多 10 条');
   assert.ok(v.diffRows.every((d) => d.kind === 'extra'));
 });
+
+test('cell_control_char_does_not_cross_column_boundary', () => {
+  /* 反证：不转义时，下面两行的朴素拼接键完全相同——\x01 冒充了列边界。 */
+  const rawJoin = (row) => row.map((v) => 's:' + String(v).trim().toLowerCase()).join('\u0001');
+  assert.equal(rawJoin(['a\u0001s:b']), rawJoin(['a', 'b']), '反证：朴素拼接确实会碰撞');
+
+  /* 两行都声明为 1 列（绕开列数校验），只考行键：判题必须判「不相等」。 */
+  const v = judgeResult([['a\u0001s:b']], ['x'], [['a', 'b']], ['x']);
+  assert.equal(v.pass, false, '含 \\x01 的单元格不得与相邻列串味');
+});

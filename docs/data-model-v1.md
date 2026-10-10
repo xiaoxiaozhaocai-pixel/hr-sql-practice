@@ -283,35 +283,46 @@ HR_DICT  ←── 以上各表的 *Code 字段（按 DictType 关联）
 
 ---
 
-## 6. v1 前 20 题的考点地图
+## 6. v1 题库（33 题）考点地图
 
-> 题干与参考 SQL 见题库文件；本节只列**考点**与**用到的表**。
+> 题干与参考 SQL 见 `data/questions.json`；本表不含手写表名——「用到的表」由 `src/tables.js` 的 `questionTables()` 从每题参考 SQL 现算（按首次出现顺序、以 ` + ` 连接）。
 > 语法约定：**避开** `CONVERT`、`PIVOT/UNPIVOT`、`MERGE`、`TOP n PERCENT`、存储过程/触发器/游标（工程侧转译层覆盖不到）。
 
-| 题号 | 考点 | 用到的表 |
-|---|---|---|
-| 1 | `SELECT` 指定列 + `WHERE` 等值 | HR_EMPLOYEE |
-| 2 | `WHERE` 多条件 + `AND/OR` + 括号优先级 | HR_EMPLOYEE |
-| 3 | `ORDER BY` **多键排序**（字符型数字的坑） | HR_ORG |
-| 4 | `BETWEEN` / 日期区间 | HR_EMPLOYEE |
-| 5 | `IN` / `NOT IN` + `NULL` 陷阱 | HR_EMPLOYEE |
-| 6 | `COUNT` / `COUNT(*)` vs `COUNT(列)` 的差异（踩空值） | HR_EMPLOYEE |
-| 7 | `GROUP BY` + `SUM` | HR_SALARY |
-| 8 | `GROUP BY` + `HAVING` | HR_ATTENDANCE |
-| 9 | `AVG` + 四舍五入 + `NULL` 影响 | HR_PERFORMANCE |
-| 10 | `GROUP BY` 多列 + 排序 | HR_SALARY |
-| 11 | 两表 `INNER JOIN`（人 ↔ 任职） | HR_EMPLOYEE + HR_ASSIGNMENT |
-| 12 | 三表 `JOIN`（人 ↔ 任职 ↔ 组织） | + HR_ORG |
-| 13 | `LEFT JOIN` 找"没有 XX 的人" | HR_EMPLOYEE + HR_PERFORMANCE |
-| 14 | `JOIN` + 字典表翻译（代码 → 中文） | + HR_DICT |
-| 15 | `JOIN` + **时间条件**（某时点的组织归属）★ | HR_ASSIGNMENT + HR_ORG |
-| 16 | 子查询（`IN` / 标量子查询） | HR_SALARY + HR_EMPLOYEE |
-| 17 | 相关子查询 / `EXISTS` | HR_RECRUIT_REQ + HR_CANDIDATE |
-| 18 | `ROW_NUMBER()` 取每组第一条 | HR_SALARY |
-| 19 | 聚合 + `JOIN` 求"编制 vs 实配" | HR_POSITION + HR_ASSIGNMENT |
-| 20 | 递归 CTE 遍历组织树 | HR_ORG |
-
----
+| 题号(seq) | id | 考点(knowledge_point) | 用到的表 |
+|---|---|---|---|
+| 1 | q001 | 单表筛选 + NULL 判断 | HR_EMPLOYEE |
+| 2 | q002 | WHERE 多条件 + AND / OR 优先级 | HR_EMPLOYEE |
+| 3 | q003 | ORDER BY 多键排序（字符型数字陷阱） | HR_ORG |
+| 4 | q004 | BETWEEN / 日期区间 | HR_EMPLOYEE |
+| 5 | q005 | IN / NOT IN 与 NULL 陷阱 | HR_EMPLOYEE |
+| 6 | q006 | COUNT(*) 与 COUNT(列) 的差异 | HR_EMPLOYEE |
+| 7 | q007 | 分组 + HAVING 找重复（一人多段任职） | HR_ASSIGNMENT + HR_EMPLOYEE |
+| 8 | q008 | 多表 JOIN + 分组聚合（当前主职口径） | HR_ASSIGNMENT + HR_ORG + HR_EMPLOYEE |
+| 9 | q009 | 数据质量排查（日期异常） | HR_ASSIGNMENT + HR_EMPLOYEE + HR_ORG |
+| 10 | q010 | GROUP BY + SUM | HR_SALARY |
+| 11 | q011 | GROUP BY + HAVING | HR_ATTENDANCE |
+| 12 | q012 | AVG + 四舍五入 + NULL 影响 | HR_PERFORMANCE |
+| 13 | q013 | 某时点在职口径（时间区间去重） | V_EMP_ASSIGNMENT |
+| 14 | q014 | LEFT JOIN / NOT EXISTS 找“没有 XX 的人” | HR_EMPLOYEE + HR_PERFORMANCE |
+| 15 | q015 | JOIN 字典表做代码翻译（码值表尾空格陷阱） | HR_ORG + HR_DICT |
+| 16 | q016 | 标量子查询（与聚合结果比较） | HR_SALARY |
+| 17 | q017 | 相关子查询 / NOT EXISTS | HR_RECRUIT_REQ + HR_CANDIDATE |
+| 18 | q018 | ROW_NUMBER() 取每组第一条 | HR_SALARY |
+| 19 | q019 | 聚合 + JOIN 求编制 vs 实配（视图） | V_ORG_HEADCOUNT |
+| 20 | q020 | 递归 CTE / 组织树（视图 V_ORG_TREE） | V_ORG_TREE |
+| 21 | q021 | 多列分组（GROUP BY 多列） | HR_EMPLOYEE |
+| 22 | q022 | 条件聚合 SUM(CASE WHEN …) | HR_EMPLOYEE |
+| 23 | q023 | LEFT JOIN + 空组补 0（NULL 陷阱） | HR_ORG + HR_ASSIGNMENT |
+| 24 | q024 | COUNT(*) 与 COUNT(DISTINCT) 的差异（去重计数） | HR_ASSIGNMENT |
+| 25 | q025 | 占比计算 + 整数除法陷阱 | HR_EMPLOYEE |
+| 26 | q026 | 分组 + 排序 + 取前 N | HR_SALARY |
+| 27 | q027 | 分组小计与总计对比（占比） | HR_ORG |
+| 28 | q028 | 多维汇总（按岗位族 × 职级多列分组） | HR_ASSIGNMENT + HR_JOB |
+| 29 | q029 | 分档计数 + NULL 作为独立分组 | HR_PERFORMANCE |
+| 30 | q030 | 口径陷阱：跨币种直接 AVG | HR_SALARY |
+| 31 | q031 | 口径陷阱：比率的简单平均 vs 天数加权 | HR_ATTENDANCE |
+| 32 | q032 | 口径陷阱：NULL 与 0 的计数差异 | HR_ATTENDANCE |
+| 33 | q033 | CASE WHEN 分桶聚合 | HR_SALARY |
 
 ## 7. 交给工程侧的三个提醒
 

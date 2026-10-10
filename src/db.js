@@ -25,6 +25,20 @@
     return bytes.buffer;
   }
 
+  /* 单次查询最多返回的行数：超过即截断并在结果里置 truncated=true。
+     取值理由：题库 33 题 expected.row_count 最大 200（HR_EMPLOYEE 全表），
+     1000 给 5 倍余量，既不误伤任何题的参考答案，又能挡住
+     `SELECT * FROM HR_SALARY a, HR_SALARY b` 这类笛卡尔积把结果全物化进内存。 */
+  var MAX_ROWS = 1000;
+
+  /* 建一份新库：schema + seed（seed 含 PRAGMA ignore_check_constraints，必须整体灌）。 */
+  function buildDb(SQL, opts) {
+    var db = new SQL.Database();
+    db.run(opts.schemaSql);
+    db.run(opts.seedSql);
+    return db;
+  }
+
   /**
    * 建库 + 灌数。
    * @param {Function} initSqlJs vendor 加载器（由 sql-wasm.js 暴露）
@@ -33,10 +47,22 @@
    */
   function createDatabase(initSqlJs, opts) {
     return initSqlJs({ wasmBinary: base64ToArrayBuffer(opts.wasmBase64) }).then(function (SQL) {
-      var db = new SQL.Database();
-      db.run(opts.schemaSql);
-      db.run(opts.seedSql);
+      var db = buildDb(SQL, opts);
       return { db: db, selfCheck: selfCheck(db, opts.expectedCounts) };
+    });
+  }
+
+  /**
+   * 一次 wasm 实例、两份独立 Database：db = 用户作答库（随便改），refDb = 判题参考库（只读）。
+   * 参考库与作答库隔离，用户 UPDATE/DELETE/DROP/CREATE 改不到判题基准。
+   * 内存代价：只多一份种子库（11 表 / 4842 行），不做快照、不复制多份。
+   * @returns {Promise<{db:Object, refDb:Object, selfCheck:Object}>}
+   */
+  function createDatabases(initSqlJs, opts) {
+    return initSqlJs({ wasmBinary: base64ToArrayBuffer(opts.wasmBase64) }).then(function (SQL) {
+      var db = buildDb(SQL, opts);
+      var refDb = buildDb(SQL, opts);
+      return { db: db, refDb: refDb, selfCheck: selfCheck(db, opts.expectedCounts) };
     });
   }
 
@@ -70,18 +96,50 @@
   /**
    * 跑一段用户 SQL，取最后一条有结果集的语句。
    * 语法错误原样抛出，由 UI 展示原始错误信息。
+   *
+   * 实现用 prepare + step 逐行取，而不是 db.exec：
+   *   1) 空结果集（如 WHERE 1 = 0）：getColumnNames() 在 step 之前就有值，列名不再丢；
+   *   2) 行上限 MAX_ROWS：取满即停并置 truncated=true，不会把整张笛卡尔积物化进内存。
+   * 注意：行上限只约束「取出的行」，聚合/排序/笛卡尔积的中间计算仍由 SQLite 在
+   *       sqlite3_step 内跑完，WASM 单线程无 sqlite3_interrupt / progress handler
+   *      （vendor 未导出），因此重聚合查询本身无法真正中断——见 docs 与汇报。
    */
   function runQuery(db, sql) {
-    var res = db.exec(sql);
-    if (!res || res.length === 0) return { columns: [], rows: [] };
-    var last = res[res.length - 1];
-    return { columns: last.columns.slice(), rows: last.values.map(function (r) { return r.slice(); }) };
+    if (!sql || !String(sql).trim()) return { columns: [], rows: [], truncated: false };
+    var iter = db.iterateStatements(sql);
+    var last = null;
+    var truncated = false;
+    var step;
+    while (!(step = iter.next()).done) {
+      var st = step.value;
+      try {
+        var cols = st.getColumnNames();
+        if (!cols || cols.length === 0) {
+          while (st.step()) { /* 无结果集的语句（INSERT/UPDATE/DDL）：执行到底 */ }
+          continue;
+        }
+        var rows = [];
+        var capped = false;
+        while (st.step()) {
+          if (rows.length >= MAX_ROWS) { capped = true; break; }
+          rows.push(st.get());
+        }
+        last = { columns: cols.slice(), rows: rows };
+        if (capped) truncated = true;
+      } finally {
+        st.free();
+      }
+    }
+    if (!last) return { columns: [], rows: [], truncated: false };
+    return { columns: last.columns, rows: last.rows, truncated: truncated };
   }
 
   root.HRDb = {
     TABLE_KEYS: TABLE_KEYS,
+    MAX_ROWS: MAX_ROWS,
     base64ToArrayBuffer: base64ToArrayBuffer,
     createDatabase: createDatabase,
+    createDatabases: createDatabases,
     selfCheck: selfCheck,
     runQuery: runQuery
   };

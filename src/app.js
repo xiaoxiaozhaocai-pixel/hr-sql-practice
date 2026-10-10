@@ -53,6 +53,7 @@
   if (state) L.ensureDay(state, L.todayStamp());
 
   var db = null;
+  var refDb = null;           // 判题参考库：与 db 隔离，用户写操作改不到
   var dbReady = false;
   var refCache = {};          // id -> 参考 SQL 的实跑结果（含是否与 expected.row_count 对账成功）
   var currentId = null;
@@ -654,7 +655,8 @@
       if (!lastRun) { note.textContent = '还没有运行结果，点上方的「运行」跑一次。'; table.textContent = ''; return; }
       renderTable(table, lastRun.columns, lastRun.rows, MAX_PREVIEW_ROWS);
       note.textContent = '共 ' + lastRun.rows.length + ' 行、' + lastRun.columns.length + ' 列' +
-        (lastRun.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。');
+        (lastRun.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。') +
+        (lastRun.truncated ? '（已达单次查询上限 ' + window.HRDb.MAX_ROWS + ' 行，结果被截断。）' : '');
       return;
     }
 
@@ -723,7 +725,8 @@
     var out = { ok: false, error: null, result: null, expectedRowCount: null, mismatch: false };
     var sql = q.reference_sql_sqlite || q.reference_sql || '';
     try {
-      out.result = window.HRDb.runQuery(db, sql);
+      /* 参考结果只在干净的 refDb 上跑，与用户作答库 db 完全隔离。 */
+      out.result = window.HRDb.runQuery(refDb, sql);
       out.ok = true;
       var exp = q.expected && typeof q.expected.row_count === 'number' ? q.expected.row_count : null;
       out.expectedRowCount = exp;
@@ -753,7 +756,7 @@
       renderRunError(String(e && e.message ? e.message : e));
       return;
     }
-    lastRun = { columns: res.columns, rows: res.rows };
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
     show($('result-block'), true);
     showResultTab('mine');
     if (q) { state.sql[q.id] = sql; saveProgress(); }
@@ -808,7 +811,7 @@
       { orderSensitive: !!(q.expected && q.expected.order_sensitive) }
     );
 
-    lastRun = { columns: res.columns, rows: res.rows };
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
     show($('result-block'), true);
     showResultTab('mine');
 
@@ -1086,7 +1089,7 @@
       return;
     }
     showBanner('load-banner', '正在初始化内置数据库（建表 + 灌数 + 11 表自检）…');
-    window.HRDb.createDatabase(initSqlJs, {
+    window.HRDb.createDatabases(initSqlJs, {
       wasmBase64: BOOT.wasmBase64,
       schemaSql: BOOT.schemaSql,
       seedSql: BOOT.seedSql,
@@ -1094,6 +1097,7 @@
     }).then(function (r) {
       showBanner('load-banner', '');
       db = r.db;
+      refDb = r.refDb;
       dbReady = true;
       /* 库就绪后补渲染一次码值对照：首屏渲染时库还没建好，查不了 HR_DICT。 */
       renderDictHints(currentQuestion());

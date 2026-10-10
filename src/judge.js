@@ -30,6 +30,7 @@
 
   var MAX_DIFF_ROWS = 10;
   var SEP = '\u0001';
+  var ESC = '\u0002';
   var NULL_KEY = 'z:';
 
   function isNil(v) {
@@ -100,9 +101,15 @@
     return 'o:' + JSON.stringify(value);
   }
 
+  /* 单元格 key 内的 SEP / ESC 先转义，再拿 SEP 当列分隔符拼接。
+     否则字符串里的 \x01 会冒充列边界，让 ['a\x01s:b'] 与 ['a','b'] 拼出同一个键。 */
+  function escapeKey(k) {
+    return k.split(ESC).join(ESC + ESC).split(SEP).join(ESC + SEP);
+  }
+
   function rowKey(row) {
     var keys = [];
-    for (var i = 0; i < row.length; i++) keys.push(cellKey(row[i]));
+    for (var i = 0; i < row.length; i++) keys.push(escapeKey(cellKey(row[i])));
     return keys.join(SEP);
   }
 

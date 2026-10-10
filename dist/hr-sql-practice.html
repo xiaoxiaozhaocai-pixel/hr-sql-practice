@@ -741,6 +741,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
   var MAX_DIFF_ROWS = 10;
   var SEP = '\u0001';
+  var ESC = '\u0002';
   var NULL_KEY = 'z:';
 
   function isNil(v) {
@@ -811,9 +812,15 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return 'o:' + JSON.stringify(value);
   }
 
+  /* 单元格 key 内的 SEP / ESC 先转义，再拿 SEP 当列分隔符拼接。
+     否则字符串里的 \x01 会冒充列边界，让 ['a\x01s:b'] 与 ['a','b'] 拼出同一个键。 */
+  function escapeKey(k) {
+    return k.split(ESC).join(ESC + ESC).split(SEP).join(ESC + SEP);
+  }
+
   function rowKey(row) {
     var keys = [];
-    for (var i = 0; i < row.length; i++) keys.push(cellKey(row[i]));
+    for (var i = 0; i < row.length; i++) keys.push(escapeKey(cellKey(row[i])));
     return keys.join(SEP);
   }
 
@@ -1612,6 +1619,20 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return bytes.buffer;
   }
 
+  /* 单次查询最多返回的行数：超过即截断并在结果里置 truncated=true。
+     取值理由：题库 33 题 expected.row_count 最大 200（HR_EMPLOYEE 全表），
+     1000 给 5 倍余量，既不误伤任何题的参考答案，又能挡住
+     `SELECT * FROM HR_SALARY a, HR_SALARY b` 这类笛卡尔积把结果全物化进内存。 */
+  var MAX_ROWS = 1000;
+
+  /* 建一份新库：schema + seed（seed 含 PRAGMA ignore_check_constraints，必须整体灌）。 */
+  function buildDb(SQL, opts) {
+    var db = new SQL.Database();
+    db.run(opts.schemaSql);
+    db.run(opts.seedSql);
+    return db;
+  }
+
   /**
    * 建库 + 灌数。
    * @param {Function} initSqlJs vendor 加载器（由 sql-wasm.js 暴露）
@@ -1620,10 +1641,22 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
    */
   function createDatabase(initSqlJs, opts) {
     return initSqlJs({ wasmBinary: base64ToArrayBuffer(opts.wasmBase64) }).then(function (SQL) {
-      var db = new SQL.Database();
-      db.run(opts.schemaSql);
-      db.run(opts.seedSql);
+      var db = buildDb(SQL, opts);
       return { db: db, selfCheck: selfCheck(db, opts.expectedCounts) };
+    });
+  }
+
+  /**
+   * 一次 wasm 实例、两份独立 Database：db = 用户作答库（随便改），refDb = 判题参考库（只读）。
+   * 参考库与作答库隔离，用户 UPDATE/DELETE/DROP/CREATE 改不到判题基准。
+   * 内存代价：只多一份种子库（11 表 / 4842 行），不做快照、不复制多份。
+   * @returns {Promise<{db:Object, refDb:Object, selfCheck:Object}>}
+   */
+  function createDatabases(initSqlJs, opts) {
+    return initSqlJs({ wasmBinary: base64ToArrayBuffer(opts.wasmBase64) }).then(function (SQL) {
+      var db = buildDb(SQL, opts);
+      var refDb = buildDb(SQL, opts);
+      return { db: db, refDb: refDb, selfCheck: selfCheck(db, opts.expectedCounts) };
     });
   }
 
@@ -1657,18 +1690,50 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   /**
    * 跑一段用户 SQL，取最后一条有结果集的语句。
    * 语法错误原样抛出，由 UI 展示原始错误信息。
+   *
+   * 实现用 prepare + step 逐行取，而不是 db.exec：
+   *   1) 空结果集（如 WHERE 1 = 0）：getColumnNames() 在 step 之前就有值，列名不再丢；
+   *   2) 行上限 MAX_ROWS：取满即停并置 truncated=true，不会把整张笛卡尔积物化进内存。
+   * 注意：行上限只约束「取出的行」，聚合/排序/笛卡尔积的中间计算仍由 SQLite 在
+   *       sqlite3_step 内跑完，WASM 单线程无 sqlite3_interrupt / progress handler
+   *      （vendor 未导出），因此重聚合查询本身无法真正中断——见 docs 与汇报。
    */
   function runQuery(db, sql) {
-    var res = db.exec(sql);
-    if (!res || res.length === 0) return { columns: [], rows: [] };
-    var last = res[res.length - 1];
-    return { columns: last.columns.slice(), rows: last.values.map(function (r) { return r.slice(); }) };
+    if (!sql || !String(sql).trim()) return { columns: [], rows: [], truncated: false };
+    var iter = db.iterateStatements(sql);
+    var last = null;
+    var truncated = false;
+    var step;
+    while (!(step = iter.next()).done) {
+      var st = step.value;
+      try {
+        var cols = st.getColumnNames();
+        if (!cols || cols.length === 0) {
+          while (st.step()) { /* 无结果集的语句（INSERT/UPDATE/DDL）：执行到底 */ }
+          continue;
+        }
+        var rows = [];
+        var capped = false;
+        while (st.step()) {
+          if (rows.length >= MAX_ROWS) { capped = true; break; }
+          rows.push(st.get());
+        }
+        last = { columns: cols.slice(), rows: rows };
+        if (capped) truncated = true;
+      } finally {
+        st.free();
+      }
+    }
+    if (!last) return { columns: [], rows: [], truncated: false };
+    return { columns: last.columns, rows: last.rows, truncated: truncated };
   }
 
   root.HRDb = {
     TABLE_KEYS: TABLE_KEYS,
+    MAX_ROWS: MAX_ROWS,
     base64ToArrayBuffer: base64ToArrayBuffer,
     createDatabase: createDatabase,
+    createDatabases: createDatabases,
     selfCheck: selfCheck,
     runQuery: runQuery
   };
@@ -1731,6 +1796,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   if (state) L.ensureDay(state, L.todayStamp());
 
   var db = null;
+  var refDb = null;           // 判题参考库：与 db 隔离，用户写操作改不到
   var dbReady = false;
   var refCache = {};          // id -> 参考 SQL 的实跑结果（含是否与 expected.row_count 对账成功）
   var currentId = null;
@@ -2332,7 +2398,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (!lastRun) { note.textContent = '还没有运行结果，点上方的「运行」跑一次。'; table.textContent = ''; return; }
       renderTable(table, lastRun.columns, lastRun.rows, MAX_PREVIEW_ROWS);
       note.textContent = '共 ' + lastRun.rows.length + ' 行、' + lastRun.columns.length + ' 列' +
-        (lastRun.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。');
+        (lastRun.rows.length > MAX_PREVIEW_ROWS ? '，仅显示前 ' + MAX_PREVIEW_ROWS + ' 行。' : '。') +
+        (lastRun.truncated ? '（已达单次查询上限 ' + window.HRDb.MAX_ROWS + ' 行，结果被截断。）' : '');
       return;
     }
 
@@ -2401,7 +2468,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var out = { ok: false, error: null, result: null, expectedRowCount: null, mismatch: false };
     var sql = q.reference_sql_sqlite || q.reference_sql || '';
     try {
-      out.result = window.HRDb.runQuery(db, sql);
+      /* 参考结果只在干净的 refDb 上跑，与用户作答库 db 完全隔离。 */
+      out.result = window.HRDb.runQuery(refDb, sql);
       out.ok = true;
       var exp = q.expected && typeof q.expected.row_count === 'number' ? q.expected.row_count : null;
       out.expectedRowCount = exp;
@@ -2431,7 +2499,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       renderRunError(String(e && e.message ? e.message : e));
       return;
     }
-    lastRun = { columns: res.columns, rows: res.rows };
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
     show($('result-block'), true);
     showResultTab('mine');
     if (q) { state.sql[q.id] = sql; saveProgress(); }
@@ -2486,7 +2554,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       { orderSensitive: !!(q.expected && q.expected.order_sensitive) }
     );
 
-    lastRun = { columns: res.columns, rows: res.rows };
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
     show($('result-block'), true);
     showResultTab('mine');
 
@@ -2764,7 +2832,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       return;
     }
     showBanner('load-banner', '正在初始化内置数据库（建表 + 灌数 + 11 表自检）…');
-    window.HRDb.createDatabase(initSqlJs, {
+    window.HRDb.createDatabases(initSqlJs, {
       wasmBase64: BOOT.wasmBase64,
       schemaSql: BOOT.schemaSql,
       seedSql: BOOT.seedSql,
@@ -2772,6 +2840,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }).then(function (r) {
       showBanner('load-banner', '');
       db = r.db;
+      refDb = r.refDb;
       dbReady = true;
       /* 库就绪后补渲染一次码值对照：首屏渲染时库还没建好，查不了 HR_DICT。 */
       renderDictHints(currentQuestion());

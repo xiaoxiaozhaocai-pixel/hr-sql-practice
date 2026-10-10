@@ -33,6 +33,9 @@ function parseModelMarkdown(md) {
     const lines = block.split(/\r?\n/);
     let inTable = false;
     for (const line of lines) {
+      /* 最后一个 ### 2.N 小节会一路吃到文件末尾：遇到顶层 ## 标题即停，
+         否则后面 §6 的四列表格会被误当成字段行数进来。 */
+      if (/^##\s/.test(line)) break;
       const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
       if (cells.length < 4) continue;
       if (cells[0] === '字段') { inTable = true; continue; }
