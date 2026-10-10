@@ -1,7 +1,7 @@
 # 语法卡 v1 · 落卡口径与来源（T20 C 单）
 
 - 签发：本线（工程侧）
-- 内容唯一来源：`D:\dsh\work\_syntax_source_v2.md`《语法首现清单 与 分段映射 v2》（覆盖 q001–q120）
+- 内容唯一来源：`C:\Users\肖赵才\Coze\Drive\小职\所有对话\主对话\hr-sql-platform\接收_20261010\语法首现清单_与_分段映射_v2.md`《语法首现清单 与 分段映射 v2》（覆盖 q001–q120）；`D:\dsh\work\_syntax_source_v2.md` 为执行期工作副本，内容与该原件同一份
 - 仓库输入：`data/questions.json`（根对象 `schema_version` / `db` / `questions`，120 题）
 - 卡片契约：`src/levels.js:validSyntaxItem` —— `{syntax, what, when, example, misuse}` 五个字段都必须是非空字符串，缺一即整张卡作废
 - 学员侧《先修地图》（`_syntax_prereq_v1.md`）**只作措辞参照，未从它取任何卡**
