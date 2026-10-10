@@ -60,10 +60,15 @@
 
 ```bash
 node build.mjs                                   # 零依赖打包，产出 dist/hr-sql-practice.html
-node --test test/judge.test.mjs test/quest.test.mjs   # 22 项：判题引擎 12 + 关卡编排/游戏化 10
+npm test                                         # 49 项：判题引擎 / 关卡编排 / 段位轴 / 展示口径 / 建库
+npm run verify                                   # 独立复核：真实 sql.js 重建库，120 题参考 SQL 与 expected 对账
 ```
 
-不需要 `npm install`，`package.json` 的 `dependencies` 为空。也可以 `npm test` / `npm run build`。
+不需要 `npm install`，`package.json` 的 `dependencies` 为空。也可以 `npm run build`。
+
+> **重建数据库 / 改列类型 / 改题库后必跑 `npm run verify`**：它会用真实 sql.js 重建 `data/schema_sqlite.sql`
+> + `data/seed_sqlite.sql`，逐题跑 `reference_sql_sqlite` 与 `expected` 对账（含 9 题「前 N 行样本」按序前缀比对、
+> order_sensitive 题逐行比序）。失败时退出码 1 并打印题号与差异行。缘由见 `docs/known-limits-v1.md` 限制 3。
 
 ---
 
