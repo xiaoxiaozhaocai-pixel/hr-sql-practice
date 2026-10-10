@@ -340,3 +340,96 @@ test('saveState_marks_memoryOnly_on_failure_and_clears_on_success', () => {
   assert.equal(L.saveState(good, s), true);
   assert.equal(s.learning.persistence, 'persisted', '下次成功解除标记');
 });
+
+/* ---------------------------- 每日换题（T17） ---------------------------- */
+
+const ORDER = SECTIONS.reduce((acc, sec) => acc.concat(sec.questions.map((q) => q.id)), []);
+const DAY = '2026-06-30';
+const snapshot = (s) => JSON.parse(JSON.stringify(s));
+
+test('replacePlanItem_swaps_one_unfinished_item_in_place', () => {
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  const p = L.buildDailyPlan(s, SECTIONS, DAY);
+  assert.deepEqual(p.planIds, ORDER.slice(0, 3), '默认计划按课程顺序取前 3');
+  const att = L.recordLearningAttempt(s, checkEv(ORDER[0], 1, true, DAY));
+  L.creditLearningEvent(s, Object.assign({}, att, { stamp: DAY }));
+  const creditedBefore = s.learning.daily.creditedIds.slice();
+
+  const r = L.replacePlanItem(s, ORDER[2], { sections: SECTIONS });
+  assert.equal(r.replaced, true);
+  assert.equal(r.fromId, ORDER[2]);
+  assert.equal(r.reason, 'replaced');
+  assert.equal(r.toId, ORDER[3], '候选池排除计划内其余项后取下一题');
+  assert.deepEqual(s.learning.daily.planIds, [ORDER[0], ORDER[1], ORDER[3]], '长度不变且保持原位置');
+  assert.equal(s.learning.daily.planIds.filter((id) => id === r.toId).length, 1, '新 id 不与其余项重复');
+  assert.deepEqual(s.learning.daily.creditedIds, creditedBefore, '已计数成果不动');
+  assert.equal(s.learning.daily.goal, p.goal, 'goal 不动');
+});
+
+test('replacePlanItem_refuses_credited_item_without_mutating_state', () => {
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  L.buildDailyPlan(s, SECTIONS, DAY);
+  const att = L.recordLearningAttempt(s, checkEv(ORDER[0], 1, true, DAY));
+  L.creditLearningEvent(s, Object.assign({}, att, { stamp: DAY }));
+  assert.equal(s.learning.daily.creditedIds.includes(ORDER[0]), true, '前置：该题已计数');
+  const before = snapshot(s);
+  const r = L.replacePlanItem(s, ORDER[0], { sections: SECTIONS });
+  assert.deepEqual(r, { replaced: false, fromId: ORDER[0], toId: null, reason: 'already-credited' });
+  assert.deepEqual(snapshot(s), before, '被拒时 state 一个字节都不改');
+});
+
+test('replacePlanItem_reports_no_candidate_when_nothing_else_is_eligible', () => {
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  ORDER.forEach((id) => {
+    if (id === ORDER[0]) return;
+    s.passed[id] = true;
+    s.learning.completions[id] = { firstPassDay: DAY, completionType: 'independent', lastPassDay: DAY };
+  });
+  const p = L.buildDailyPlan(s, SECTIONS, DAY);
+  assert.deepEqual(p.planIds, [ORDER[0]], '全库仅剩该题未完成');
+  const before = snapshot(s);
+  const r = L.replacePlanItem(s, ORDER[0], { sections: SECTIONS });
+  assert.deepEqual(r, { replaced: false, fromId: ORDER[0], toId: null, reason: 'no-candidate' });
+  assert.deepEqual(snapshot(s), before, '凑不满也不塞不可用题 / 不宣告达标');
+  assert.equal(L.goalMet(s), false);
+});
+
+test('buildDailyPlan_honours_unavailableIds_and_lowers_goal_with_adjusted_reason', () => {
+  const blocked = ORDER.slice(0, 4);
+  const sA = L.freshState();
+  L.ensureLearningDay(sA, DAY);
+  const pA = L.buildDailyPlan(sA, SECTIONS, DAY, { unavailableIds: blocked });
+  assert.equal(pA.goal, 3, '仍有足够可用题时不降目标');
+  assert.deepEqual(pA.planIds, ORDER.slice(4, 7), '不可用题一律不进计划');
+  assert.equal(blocked.some((id) => pA.planIds.includes(id)), false);
+  assert.equal(pA.adjusted, undefined, '未降目标不给 adjusted');
+
+  const sB = L.freshState();
+  L.ensureLearningDay(sB, DAY);
+  const blockedB = ORDER.slice(2);
+  const pB = L.buildDailyPlan(sB, SECTIONS, DAY, { unavailableIds: blockedB });
+  assert.deepEqual(pB.planIds, ORDER.slice(0, 2));
+  assert.equal(pB.goal, 2, '凑不满时降低当天 goal');
+  assert.equal(pB.reason, 'reduced');
+  assert.ok(pB.adjusted, '必须给出 adjusted');
+  assert.equal(pB.adjusted.goal, 2);
+  assert.equal(typeof pB.adjusted.reason, 'string');
+  assert.ok(pB.adjusted.reason.length > 0, 'adjusted.reason 可渲染且非空');
+  assert.equal(pB.adjusted.reason.includes(String(blockedB.length)), true, 'reason 点明待复核题数');
+});
+
+test('replacePlanItem_is_idempotent_for_the_same_question', () => {
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  L.buildDailyPlan(s, SECTIONS, DAY);
+  const r1 = L.replacePlanItem(s, ORDER[2], { sections: SECTIONS });
+  assert.equal(r1.replaced, true);
+  const after = snapshot(s);
+  const r2 = L.replacePlanItem(s, ORDER[2], { sections: SECTIONS });
+  assert.deepEqual(r2, { replaced: false, fromId: ORDER[2], toId: null, reason: 'not-in-plan' });
+  assert.equal(r2.replaced, false, '第二次不再替换');
+  assert.deepEqual(snapshot(s), after, '第二次调用 state 深度相等');
+});
