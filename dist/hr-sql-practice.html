@@ -1524,24 +1524,19 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   }
 
   /**
-   * 每日小组：确定性选题。同一 state + 同一天可重入且结果一致（不依赖 Math.random）。
+   * 候选池：与 buildDailyPlan / replacePlanItem 共用的确定性选题顺序。
    * 顺序：最早到期复查 1 题 → 当前段起的未通过新题 → 其余到期复查 → 维护复查（≥7 天未练）。
-   * @returns {{day:string, goal:number, planIds:string[], reason:string}}
+   * opts.unavailableIds（题库待复核 / 不可用）一律不进池。
    */
-  function buildDailyPlan(state, sections, today) {
-    ensureLearning(state);
-    today = today || state.learning.daily.day || todayStamp();
-    ensureLearningDay(state, today);
-    var d = state.learning.daily;
-    if (d.planIds.length > 0) {
-      return { day: today, goal: d.goal, planIds: d.planIds.slice(), reason: 'fixed' };
-    }
-    var goal = (typeof d.goal === 'number' && d.goal > 0) ? d.goal : DEFAULT_DAILY_GOAL;
+  function planPool(state, sections, today, opts) {
+    opts = opts || {};
+    var unavailable = {};
+    uniqueStrings(opts.unavailableIds).forEach(function (id) { unavailable[id] = true; });
     var idx = courseIndex(sections);
     var review = state.learning.review;
 
     var dueList = Object.keys(review)
-      .filter(function (id) { return review[id] && review[id].status === 'due' && idx.byId[id]; })
+      .filter(function (id) { return review[id] && review[id].status === 'due' && idx.byId[id] && !unavailable[id]; })
       .map(function (id) { return idx.byId[id]; })
       .sort(function (a, b) {
         var da = str(review[a.id].dueDay, '');
@@ -1552,38 +1547,59 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       });
 
     var curSec = currentSectionId(state, sections);
-    var fresh = idx.flat.filter(function (x) { return !state.passed[x.id]; });
+    var fresh = idx.flat.filter(function (x) { return !state.passed[x.id] && !unavailable[x.id]; });
     /* 当前段优先，其余按课程顺序（不按 id 连续性或 level 推导段位） */
     var freshOrdered = fresh.filter(function (x) { return x.section >= curSec; })
       .concat(fresh.filter(function (x) { return x.section < curSec; }));
 
-    var picked = [];
-    var seen = {};
-    function push(item) {
-      if (!item || seen[item.id] || picked.length >= goal) return;
-      seen[item.id] = true;
-      picked.push(item.id);
-    }
-    if (dueList.length) push(dueList[0]);
-    for (var i = 0; i < freshOrdered.length; i++) push(freshOrdered[i]);
-    for (var j = 1; j < dueList.length; j++) push(dueList[j]);
-
     /* 维护复查：已通过且最近一次（含看答案）通过距今 ≥7 自然日，最久未练优先 */
-    if (picked.length < goal) {
-      var maint = idx.flat.filter(function (x) {
-        if (!state.passed[x.id]) return false;
-        var c = state.learning.completions[x.id];
-        if (!c || !c.lastPassDay) return false;
-        var gap = daysBetween(c.lastPassDay, today);
-        return gap !== null && gap >= MAINTENANCE_REVIEW_DAYS;
-      }).sort(function (a, b) {
-        var la = state.learning.completions[a.id].lastPassDay;
-        var lb = state.learning.completions[b.id].lastPassDay;
-        if (la !== lb) return la < lb ? -1 : 1;
-        return a.order - b.order;
-      });
-      for (var k = 0; k < maint.length; k++) push(maint[k]);
+    var maint = idx.flat.filter(function (x) {
+      if (!state.passed[x.id] || unavailable[x.id]) return false;
+      var c = state.learning.completions[x.id];
+      if (!c || !c.lastPassDay) return false;
+      var gap = daysBetween(c.lastPassDay, today);
+      return gap !== null && gap >= MAINTENANCE_REVIEW_DAYS;
+    }).sort(function (a, b) {
+      var la = state.learning.completions[a.id].lastPassDay;
+      var lb = state.learning.completions[b.id].lastPassDay;
+      if (la !== lb) return la < lb ? -1 : 1;
+      return a.order - b.order;
+    });
+
+    var ordered = [];
+    var seen = {};
+    function add(item) {
+      if (!item || seen[item.id]) return;
+      seen[item.id] = true;
+      ordered.push(item.id);
     }
+    if (dueList.length) add(dueList[0]);
+    for (var i = 0; i < freshOrdered.length; i++) add(freshOrdered[i]);
+    for (var j = 1; j < dueList.length; j++) add(dueList[j]);
+    for (var k = 0; k < maint.length; k++) add(maint[k]);
+
+    return { idx: idx, ordered: ordered };
+  }
+
+  /**
+   * 每日小组：确定性选题。同一 state + 同一天可重入且结果一致（不依赖 Math.random）。
+   * 顺序：最早到期复查 1 题 → 当前段起的未通过新题 → 其余到期复查 → 维护复查（≥7 天未练）。
+   * opts.unavailableIds：题库待复核 / 不可用题，不得进计划；因此凑不满 goal 时降低当天 goal
+   * 并在返回值附 adjusted:{goal, reason}。不传 opts 时行为与 T16 完全一致。
+   * @returns {{day:string, goal:number, planIds:string[], reason:string, adjusted?:{goal:number, reason:string}}}
+   */
+  function buildDailyPlan(state, sections, today, opts) {
+    opts = opts || {};
+    ensureLearning(state);
+    today = today || state.learning.daily.day || todayStamp();
+    ensureLearningDay(state, today);
+    var d = state.learning.daily;
+    if (d.planIds.length > 0) {
+      return { day: today, goal: d.goal, planIds: d.planIds.slice(), reason: 'fixed' };
+    }
+    var goal = (typeof d.goal === 'number' && d.goal > 0) ? d.goal : DEFAULT_DAILY_GOAL;
+    var pool = planPool(state, sections, today, opts);
+    var picked = pool.ordered.slice(0, goal);
 
     d.planIds = picked.slice();
     if (picked.length === 0) {
@@ -1592,12 +1608,65 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       return { day: today, goal: 0, planIds: [], reason: 'no-tasks' };
     }
     var reason = 'ok';
+    var adjusted = null;
     if (picked.length < goal) {
       d.goal = picked.length;
       reason = 'reduced';
+      /* 只有确实因待复核题导致目标下降时才给 adjusted，例：本题库有 2 题待复核，今日目标调整为 2 项 */
+      var blocked = 0;
+      uniqueStrings(opts.unavailableIds).forEach(function (id) { if (pool.idx.byId[id]) blocked++; });
+      if (blocked > 0) {
+        adjusted = {
+          goal: picked.length,
+          reason: '本题库有 ' + blocked + ' 题待复核，今日目标调整为 ' + picked.length + ' 项'
+        };
+      }
     }
     syncCounts(state);
-    return { day: today, goal: d.goal, planIds: d.planIds.slice(), reason: reason };
+    var out = { day: today, goal: d.goal, planIds: d.planIds.slice(), reason: reason };
+    if (adjusted) out.adjusted = adjusted;
+    return out;
+  }
+
+  /**
+   * 换题：只替换当天计划中「未完成」的一项，保持它在 planIds 中的位置。
+   * 已计数成果 / goalCelebrated / XP / passed / review 一律不动；无候选时不塞不可用题、不宣告达标。
+   * @param {Object} state
+   * @param {string} qid 计划内且未完成的题
+   * @param {{sections?:Array, today?:string, unavailableIds?:string[]}} [opts] sections 亦可作为第 4 参传入
+   * @returns {{replaced:boolean, fromId:string, toId:(string|null), reason:string}}
+   */
+  function replacePlanItem(state, qid, opts, sectionsArg) {
+    ensureLearning(state);
+    if (Array.isArray(opts)) {
+      if (sectionsArg === undefined) sectionsArg = opts;
+      opts = {};
+    }
+    opts = opts || {};
+    var sections = sectionsArg || opts.sections || [];
+    var d = state.learning.daily;
+
+    if (d.creditedIds.indexOf(qid) >= 0) {
+      return { replaced: false, fromId: qid, toId: null, reason: 'already-credited' };
+    }
+    var pos = d.planIds.indexOf(qid);
+    if (pos < 0) {
+      return { replaced: false, fromId: qid, toId: null, reason: 'not-in-plan' };
+    }
+
+    var today = opts.today || d.day || todayStamp();
+    var pool = planPool(state, sections, today, opts);
+    var inPlan = {};
+    d.planIds.forEach(function (id) { inPlan[id] = true; });
+    var toId = null;
+    for (var i = 0; i < pool.ordered.length; i++) {
+      if (!inPlan[pool.ordered[i]]) { toId = pool.ordered[i]; break; }
+    }
+    if (!toId) {
+      return { replaced: false, fromId: qid, toId: null, reason: 'no-candidate' };
+    }
+    d.planIds[pos] = toId;
+    return { replaced: true, fromId: qid, toId: toId, reason: 'replaced' };
   }
 
   /**
@@ -2050,6 +2119,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     ensureDay: ensureDay,
     ensureLearningDay: ensureLearningDay,
     buildDailyPlan: buildDailyPlan,
+    replacePlanItem: replacePlanItem,
     nextQuestion: nextQuestion,
     beginReview: beginReview,
     recordLearningAttempt: recordLearningAttempt,
