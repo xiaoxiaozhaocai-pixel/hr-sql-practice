@@ -394,4 +394,8 @@ pre {
   }
   .rail-btn { display: inline-block; }
   .detail { min-width: 0; } /* v9.1: 原 min-width:640px 令 375 宽手机横向溢出约 273px */
+  /* v9.2: 375 宽下题干标题被 chip / 尝试次数挤成单字竖排 —— 标题独占一行，二者下移 */
+  .qhead { flex-wrap: wrap; gap: 8px 12px; }
+  .qhead h3 { flex: 1 1 100%; }
+  .qhead .chip { margin-left: 0; }
 }
