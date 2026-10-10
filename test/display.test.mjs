@@ -83,3 +83,31 @@ test('renderer_shows_size_only_as_last_hint_and_hides_correct_answer_note', () =
   const list = L.hintList(shape);
   assert.ok(list.length >= 1, 'hintList 必须给出非空提示列表');
 });
+
+/*
+ * 行序口径不变式守门（2026-10-10 口径对齐，权威源：HRIS《修订说明_行序口径对齐_20261010》）
+ * 判据：题面（requirement）或输出提示（output_hint）写明排序 ⟺ expected.order_sensitive = true。
+ * 双向都要守：true 不说清 = 学员被暗坑；false 却要求排序 = 提示承诺了不执行的规则。
+ */
+const ORDER_TEXT_RE = /排序|升序|降序|顺序排列|按时点升序|依次|的顺序|①②③/;
+const ORDER_SENSITIVE_TOTAL = 94;
+
+test('row_order_flag_requires_explicit_ordering_text', () => {
+  const ordered = QUESTIONS.filter((q) => q.expected && q.expected.order_sensitive === true);
+  assert.equal(
+    ordered.length,
+    ORDER_SENSITIVE_TOTAL,
+    `逐行判题数应为 ${ORDER_SENSITIVE_TOTAL}（口径对齐后锚点），当前 ${ordered.length}；若确为口径变更，请同步 docs/questions-contract-v1.md 与本锚点`,
+  );
+  const silent = ordered
+    .filter((q) => !ORDER_TEXT_RE.test(`${q.requirement || ''}${q.output_hint || ''}`))
+    .map((q) => q.id);
+  assert.deepEqual(silent, [], '逐行判的题必须在题面或输出提示里说清行序，否则学员内容对、顺序错会被暗扣分');
+});
+
+test('output_hint_never_promises_ordering_when_flag_is_false', () => {
+  const promiseOnly = QUESTIONS
+    .filter((q) => (!q.expected || q.expected.order_sensitive !== true) && ORDER_TEXT_RE.test(q.output_hint || ''))
+    .map((q) => q.id);
+  assert.deepEqual(promiseOnly, [], '集合比对的题不得在输出提示里要求排序（提示与判分必须一致）');
+});

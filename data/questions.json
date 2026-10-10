@@ -309,7 +309,7 @@
           ]
         ],
         "content_hash": "5d9e033298d61b57f36331ee7bcd650e06ce20d22db6d329a110ac36496847c1",
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 IsActive = 1 判断在职会错：IsActive 是 1/0/NULL 混用的脏字段，与真实在职状态并不一致（在职 170 人，但 IsActive=1 的行数不是 170）。",
@@ -410,7 +410,7 @@
       ],
       "stem": "主数据组要一张“按层级、按组织编码”的组织清单做导入模板。同事说编码本来就是数字，直接排就行，结果 10 号部门被排到了 9 号前面。",
       "requirement": "列出全部组织，按组织层级(OrgLevel)升序、同层级内按组织编码(OrgCode)的数值大小升序，输出组织编码、组织名、层级。",
-      "output_hint": "三列：组织编码、组织名、层级；OrgCode 是字符型，需要转成数值再排。",
+      "output_hint": "三列：组织编码、组织名、层级；OrgCode 是字符型，需要转成数值再排；按层级升序、同层级按组织编码数值升序。",
       "expected_note": "结果规模：共 40 行",
       "hint": "在字符串比较里 '10' < '9' 是成立的（先比第一位 '1' < '9'）。要按数值排，得先把它 CAST 成整数。",
       "reference_sql": "SELECT OrgCode AS 组织编码, OrgName AS 组织名, OrgLevel AS 层级\nFROM dbo.HR_ORG\nORDER BY OrgLevel ASC, CAST(OrgCode AS INT) ASC;",
@@ -847,7 +847,7 @@
       ],
       "stem": "任职表是“人×组织×岗位×时间”的流水，一人可能有多段（入职、调动、晋升、兼岗）。主数据组要确认“哪些人有不止一段”，好排查是否出现重复任职段。",
       "requirement": "找出拥有 2 段及以上任职记录(HR_ASSIGNMENT)的员工，输出工号、姓名、任职段数，按工号升序。",
-      "output_hint": "三列：工号、姓名、任职段数。",
+      "output_hint": "三列：工号、姓名、任职段数；按工号升序。",
       "expected_note": "结果规模：预期 43 行",
       "hint": "按工号分组计数，HAVING COUNT(*) >= 2；姓名要去员工表取。",
       "reference_sql": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名, COUNT(*) AS 任职段数\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nGROUP BY e.EmpNo, e.EmpName\nHAVING COUNT(*) >= 2\nORDER BY e.EmpNo;",
@@ -1120,7 +1120,7 @@
       ],
       "stem": "一张班组的“当前在岗人数”看板。有人只把任职表和组织表 JOIN 起来数了一遍，数字偏大——因为他把历史任职段和兼岗也算进来了。",
       "requirement": "统计每个 4 级组织(班组)当前在职主职人数，输出组织编码、组织名、在职人数，按人数降序、组织编码升序。当前口径：IsPrimary=1 且 EndDate 为空。",
-      "output_hint": "三列：组织编码、组织名、在职人数（只列出有人的班组）。",
+      "output_hint": "三列：组织编码、组织名、在职人数；按在职人数降序、组织编码升序（只列出有人的班组）。",
       "expected_note": "结果规模：预期 19 行",
       "hint": "三个条件缺一不可：组织层级 = 4、IsPrimary = 1、EndDate IS NULL。",
       "reference_sql": "SELECT o.OrgCode AS 组织编码, o.OrgName AS 组织名, COUNT(*) AS 在职人数\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_ORG      o ON o.ID    = a.OrgID\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nWHERE a.IsPrimary = 1\n  AND a.EndDate IS NULL\n  AND o.OrgLevel = 4\nGROUP BY o.ID, o.OrgCode, o.OrgName\nORDER BY 在职人数 DESC, o.OrgCode ASC;",
@@ -1275,7 +1275,7 @@
       ],
       "stem": "系统上线前主数据体检，运维报“任职表里有几条记录的结束日比开始日还早”，这类记录会让任职时长算成负数。请你把它们捞出来，并带上是谁、在哪个组织。",
       "requirement": "找出任职记录(HR_ASSIGNMENT)中“结束日早于开始日”的异常数据，输出任职ID、工号、姓名、组织名、开始日、结束日，按任职ID升序。",
-      "output_hint": "六列。",
+      "output_hint": "六列；按任职ID升序。",
       "expected_note": "结果规模：预期 3 行",
       "hint": "要把员工姓名、组织名一起带出来，需要 JOIN 员工表和组织表；判断条件是 EndDate < StartDate。",
       "reference_sql": "SELECT a.ID AS 任职ID, a.EmpNo AS 工号, e.EmpName AS 姓名, o.OrgName AS 组织名,\n       a.StartDate AS 开始日, a.EndDate AS 结束日\nFROM dbo.HR_ASSIGNMENT a\nJOIN dbo.HR_EMPLOYEE e ON e.EmpNo = a.EmpNo\nJOIN dbo.HR_ORG o      ON o.ID    = a.OrgID\nWHERE a.EndDate < a.StartDate\nORDER BY a.ID;",
@@ -1361,7 +1361,7 @@
       ],
       "stem": "财务要“全年薪酬发放总额”。有人直接把 NetPay 一整列 SUM 了，数字看着很大，但里面混进了海外员工的美元和卢比，量级完全不同，不能直接相加。",
       "requirement": "按币种(CurrencyCode)统计薪酬记录数与实发工资(NetPay)合计，合计保留 2 位小数，按币种升序。",
-      "output_hint": "三列：币种、记录数、实发合计。",
+      "output_hint": "三列：币种、记录数、实发合计；按币种升序。",
       "expected_note": "结果规模：预期 3 行",
       "hint": "先 GROUP BY CurrencyCode 把不同币种拆开，再各自 SUM。",
       "reference_sql": "SELECT CurrencyCode AS 币种,\n       COUNT(*)       AS 记录数,\n       ROUND(SUM(NetPay), 2) AS 实发合计\nFROM dbo.HR_SALARY\nGROUP BY CurrencyCode\nORDER BY CurrencyCode;",
@@ -1435,7 +1435,7 @@
       ],
       "stem": "员工关系要一份“全年累计缺勤达 3 天及以上”的名单做预警。考勤表的缺勤天数大部分是空的（当月没缺勤），别把空当成 0 去数条数。",
       "requirement": "累计每位员工 12 个月的缺勤天数(AbsentDays)，找出累计≥3 天的人，输出工号与累计缺勤天数（保留 1 位小数），按累计缺勤天数降序、工号升序。",
-      "output_hint": "两列：工号、累计缺勤天数。",
+      "output_hint": "两列：工号、累计缺勤天数；按累计缺勤天数降序、工号升序。",
       "expected_note": "结果规模：预期 5 行",
       "hint": "聚合之后再筛选要用 HAVING，不能用 WHERE。",
       "reference_sql": "SELECT EmpNo AS 工号, ROUND(SUM(AbsentDays), 1) AS 累计缺勤天数\nFROM dbo.HR_ATTENDANCE\nGROUP BY EmpNo\nHAVING SUM(AbsentDays) >= 3\nORDER BY 累计缺勤天数 DESC, EmpNo;",
@@ -1512,7 +1512,7 @@
       ],
       "stem": "绩效复盘要“每个考核周期的平均分”，并顺带看参评情况。有人直接 AVG(ScoreValue)，被质疑“没参评的人是不是把分母算错了”。",
       "requirement": "按考核周期(PeriodCode)统计记录数、有分数的记录数(ScoreValue 非空)、平均分（保留 2 位），按周期升序。",
-      "output_hint": "四列：考核周期、记录数、有分数记录数、平均分。",
+      "output_hint": "四列：考核周期、记录数、有分数记录数、平均分；按考核周期升序。",
       "expected_note": "结果规模：预期 2 行",
       "hint": "AVG 会自动跳过 NULL；想核对分母，就同时把 COUNT(*) 和 COUNT(ScoreValue) 都输出来对照。",
       "reference_sql": "SELECT PeriodCode AS 考核周期,\n       COUNT(*)           AS 记录数,\n       COUNT(ScoreValue)  AS 有分数记录数,\n       ROUND(AVG(ScoreValue), 2) AS 平均分\nFROM dbo.HR_PERFORMANCE\nGROUP BY PeriodCode\nORDER BY PeriodCode;",
@@ -1644,7 +1644,7 @@
       ],
       "stem": "HRBP 要核对“为什么有些人查不到绩效”。有些在职员工确实一条考核记录都没有（如新入职不满 90 天），需要单列出来说明。",
       "requirement": "找出在职(TermDate 为空)但从未出现在绩效表(HR_PERFORMANCE)中的员工，输出工号、姓名，按工号升序。",
-      "output_hint": "两列：工号、姓名。",
+      "output_hint": "两列：工号、姓名；按工号升序。",
       "expected_note": "结果规模：预期 8 行",
       "hint": "两种写法都行：LEFT JOIN 绩效表后筛 p.EmpNo IS NULL，或用 NOT EXISTS 相关子查询。",
       "reference_sql": "SELECT e.EmpNo AS 工号, e.EmpName AS 姓名\nFROM dbo.HR_EMPLOYEE e\nWHERE e.TermDate IS NULL\n  AND NOT EXISTS (SELECT 1 FROM dbo.HR_PERFORMANCE p WHERE p.EmpNo = e.EmpNo)\nORDER BY e.EmpNo;",
@@ -1733,7 +1733,7 @@
       ],
       "stem": "组织架构盘点要按“组织类型的中文名”统计。字典表里 '部门 '、'工厂 ' 这些名称尾部带了空格，照抄分组会凭空多出一类。",
       "requirement": "统计各组织类型下的组织数量，类型名称用字典(HR_DICT, DictType='ORG_TYPE')翻译成中文，名称需去掉首尾空格，按组织数降序。",
-      "output_hint": "两列：组织类型、组织数。",
+      "output_hint": "两列：组织类型、组织数；按组织数降序。",
       "expected_note": "结果规模：预期 5 行",
       "hint": "用 TRIM（或 LTRIM+RTRIM）去掉名称首尾空格后再分组；字典要靠 DictType + Code 两把钥匙关联。",
       "reference_sql": "SELECT LTRIM(RTRIM(d.Title)) AS 组织类型, COUNT(*) AS 组织数\nFROM dbo.HR_ORG  o\nJOIN dbo.HR_DICT d ON d.DictType = 'ORG_TYPE' AND d.Code = o.OrgTypeCode\nGROUP BY d.Code, LTRIM(RTRIM(d.Title))\nORDER BY COUNT(*) DESC;",
@@ -1871,7 +1871,7 @@
       ],
       "stem": "招聘漏斗盘点要找出“开了需求却一个候选人都没进”的需求单——可能是渠道投放漏了，也可能需求挂着没真正启动。",
       "requirement": "找出在候选人表(HR_CANDIDATE)中没有任何记录的需求单，输出需求编号、状态码，按需求编号升序。",
-      "output_hint": "两列：需求编号、状态码。",
+      "output_hint": "两列：需求编号、状态码；按需求编号升序。",
       "expected_note": "结果规模：预期 3 行",
       "hint": "NOT EXISTS 相关子查询最稳；也可以用 LEFT JOIN 后筛 IS NULL。",
       "reference_sql": "SELECT r.ReqNo AS 需求编号, r.StatusCode AS 状态码\nFROM dbo.HR_RECRUIT_REQ r\nWHERE NOT EXISTS (SELECT 1 FROM dbo.HR_CANDIDATE c WHERE c.ReqNo = r.ReqNo)\nORDER BY r.ReqNo;",
@@ -1941,7 +1941,7 @@
       ],
       "stem": "薪酬快照要“每位员工最近一个月的实发工资”。月份是 YYYYMM 文本，跨年时直接取字符串最大值容易踩坑，用窗口函数更稳。",
       "requirement": "取每位员工 SalaryMonth 最大（最新）的那一期薪酬记录，输出工号、月份、实发工资，按工号升序。",
-      "output_hint": "三列：工号、月份、实发工资（每人一行）。",
+      "output_hint": "三列：工号、月份、实发工资；按工号升序（每人一行）。",
       "expected_note": "结果规模：预期 200 行",
       "hint": "ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY SalaryMonth DESC)，再取 rn = 1。",
       "reference_sql": "SELECT 工号, 月份, 实发工资\nFROM (SELECT EmpNo AS 工号, SalaryMonth AS 月份, NetPay AS 实发工资,\n             ROW_NUMBER() OVER (PARTITION BY EmpNo ORDER BY SalaryMonth DESC) AS rn\n      FROM dbo.HR_SALARY) t\nWHERE t.rn = 1\nORDER BY 工号;",
@@ -2250,7 +2250,7 @@
       ],
       "stem": "人力预算要“超编岗位”清单。编制数来自岗位表，实配人数要按基准日在职主职现算，两者口径必须一致（同一个基准日）。",
       "requirement": "用视图 V_ORG_HEADCOUNT，找出差额(GapCount)小于 0（实配 > 编制）的岗位，输出岗位编码、组织名、岗位名、编制数、实配数、差额，按差额升序、岗位编码升序。",
-      "output_hint": "六列。",
+      "output_hint": "六列；按差额升序、岗位编码升序。",
       "expected_note": "结果规模：预期 25 行",
       "hint": "GapCount = 编制数 - 实配数，小于 0 就是超编。",
       "reference_sql": "SELECT PositionCode AS 岗位编码, OrgName AS 组织名, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, GapCount AS 差额\nFROM dbo.V_ORG_HEADCOUNT\nWHERE GapCount < 0\nORDER BY GapCount ASC, PositionCode ASC;",
@@ -2512,7 +2512,7 @@
       ],
       "stem": "组织架构治理要“组织树一共几层、每层多少个”。组织表是 ParentID 自关联，层级无法直接读出，必须用递归算。",
       "requirement": "基于组织树视图 V_ORG_TREE，统计各层级(Depth)的组织数量，输出层级、组织数，按层级升序。",
-      "output_hint": "两列：层级、组织数（1/2/3/4 层）。",
+      "output_hint": "两列：层级、组织数；按层级升序（1/2/3/4 层）。",
       "expected_note": "结果规模：预期 4 行",
       "hint": "V_ORG_TREE 就是用递归 CTE 算出的组织树（含 Depth 与 OrgPath）；也可以自己写 WITH 递归来算。",
       "reference_sql": "SELECT Depth AS 层级, COUNT(*) AS 组织数\nFROM dbo.V_ORG_TREE\nGROUP BY Depth\nORDER BY Depth;",
@@ -2650,7 +2650,7 @@
             21
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "只 GROUP BY EmpTypeCode：每个类型只剩一个数字，男女被合并，看不出性别分布——本题要的是“两列交叉”分组。",
@@ -2734,7 +2734,7 @@
             2
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "SUM(CASE WHEN … THEN 1 END) 漏写 ELSE 0：不匹配时返回 NULL，而 NULL 参与加法会让整列变 NULL（NULL + 1 = NULL），结果整列为空——务必给 ELSE 0。",
@@ -2908,7 +2908,7 @@
             0
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 INNER JOIN：4 个零人班组（工艺二组、工艺三组、功能测试组、可靠性测试组）直接消失，只剩 19 行。",
@@ -3048,7 +3048,7 @@
             7.1
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "整数除法：写成 100*在职人数/总数，两引擎都按整数截断，55.3 被算成 55。",
@@ -3205,7 +3205,7 @@
             2.5
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "分母写死 40：数据一变就错，也违背“小计与总计同源”的原则。",
@@ -3289,7 +3289,7 @@
             3
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "不加 IsPrimary = 1 / EndDate IS NULL：把兼岗和历史任职段也算进来，人数虚高。",
@@ -3409,7 +3409,7 @@
             12
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "加 WHERE GradeCode IS NOT NULL：未参评者（2025H2 有 22 人、2026H1 有 12 人）被隐藏，参评率会虚高。",
@@ -3518,7 +3518,7 @@
       ],
       "stem": "老板要“月度出勤率”。两位同事各算了一版，数字略有出入：一个把每人的出勤率先算出来再取平均（人权重相等），一个用当月实出勤合计÷应出勤合计（按天数加权）。哪个对，取决于口径。",
       "requirement": "按考勤期间(AttMonth)输出两种出勤率(%)：口径A＝当月各记录出勤率的简单平均；口径B＝当月实出勤合计÷应出勤合计×100。均保留 1 位小数，按月份升序。",
-      "output_hint": "三列：月份、简单平均出勤率、加权出勤率；注意个别月份两者会差 0.1。",
+      "output_hint": "三列：月份、简单平均出勤率、加权出勤率；按月份升序；注意个别月份两者会差 0.1。",
       "hint": "口径A 用 AVG(ActualDays/WorkDays)；口径B 要先 SUM 再相除。前者每条记录等权，后者天数多的记录影响更大。",
       "reference_sql": "SELECT AttMonth AS 月份,\n       ROUND(AVG(1.0 * ActualDays / WorkDays) * 100, 1) AS 简单平均出勤率,\n       ROUND(100.0 * SUM(ActualDays) / SUM(WorkDays), 1) AS 加权出勤率\nFROM dbo.HR_ATTENDANCE\nGROUP BY AttMonth\nORDER BY AttMonth;",
       "reference_sql_sqlite": "SELECT AttMonth AS 月份,\n       ROUND(AVG(1.0 * ActualDays / WorkDays) * 100, 1) AS 简单平均出勤率,\n       ROUND(100.0 * SUM(ActualDays) / SUM(WorkDays), 1) AS 加权出勤率\nFROM HR_ATTENDANCE\nGROUP BY AttMonth\nORDER BY AttMonth;",
@@ -3737,7 +3737,7 @@
             21512.59
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "GROUP BY 里引用 SELECT 的列别名：SQLite 允许，但 SQL Server 不允许，必须把整段 CASE 表达式重复一遍。",
@@ -3913,7 +3913,7 @@
             3
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 INNER JOIN：工艺二组、工艺三组这两个零岗位班组直接被过滤掉，23 行变 21 行——这是 INNER JOIN 只保留“两边都匹配”行的必然结果。",
@@ -4276,7 +4276,7 @@
             "生产主管"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "漏掉时间条件：HR_ASSIGNMENT 里 43 人有多段任职，不加 StartDate/EndDate 过滤会把历史段一起拉出来，行数从 174 涨到两百多，一个工号出现好几行。",
@@ -4821,7 +4821,7 @@
             "二班"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "子查询不引用外层工号：把 MIN(StartDate) 写成全库最早日期，则只有那天入职的人才匹配得上，其余全被过滤，结果行数骤减。",
@@ -4991,7 +4991,7 @@
             "陈勇"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "差集写反：写成 2026H1 EXCEPT 2025H2 就变成“这一期新参加的人”，方向反过来结果完全不同。",
@@ -5093,7 +5093,7 @@
             4
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "不做 TRIM：性别“女 ”、组织类型“部门/工厂 ”在字典里带尾空格，直接显示会多一个看不见的字符，且与预期结果比对时字符串不等。",
@@ -5212,7 +5212,7 @@
             6
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "把任职的时间/主职条件写到 WHERE 里：写进 WHERE 会把 LEFT JOIN 退化成 INNER JOIN，空编岗位全被过滤掉，结果变 0 行——这是最典型的“LEFT JOIN 白写了”。",
@@ -5262,7 +5262,7 @@
       ],
       "stem": "绩效通报表要列出每个考核周期分数最高的 3 个人。有人分别对两个周期各查一次再拼，周期一多就要写 N 段；用窗口函数给“同一周期内的人”编个号，一次就能取出每期的前几名。",
       "requirement": "在每个考核周期(PeriodCode)内，按分数(ScoreValue)降序给参评者编号，取出编号 <= 3 的人，输出周期、工号、分数。",
-      "output_hint": "三列：周期、工号、分数。",
+      "output_hint": "三列：周期、工号、分数；按考核周期升序、组内名次升序。",
       "hint": "先想清楚“分组”和“排序”分别是什么：每个周期各自排名，靠 PARTITION BY 分组、ORDER BY 排序；编出来的名次号不能直接写在 WHERE 里筛，要套一层子查询。",
       "reference_sql": "SELECT 周期, 工号, 分数 FROM (\n  SELECT p.PeriodCode AS 周期, p.EmpNo AS 工号, p.ScoreValue AS 分数,\n         ROW_NUMBER() OVER (PARTITION BY p.PeriodCode ORDER BY p.ScoreValue DESC) AS rn\n  FROM dbo.HR_PERFORMANCE AS p\n  WHERE p.ScoreValue IS NOT NULL\n) AS t\nWHERE t.rn <= 3\nORDER BY 周期, rn;",
       "reference_sql_sqlite": "SELECT 周期, 工号, 分数 FROM (\n  SELECT p.PeriodCode AS 周期, p.EmpNo AS 工号, p.ScoreValue AS 分数,\n         ROW_NUMBER() OVER (PARTITION BY p.PeriodCode ORDER BY p.ScoreValue DESC) AS rn\n  FROM HR_PERFORMANCE AS p\n  WHERE p.ScoreValue IS NOT NULL\n) AS t\nWHERE t.rn <= 3\nORDER BY 周期, rn;",
@@ -5428,7 +5428,7 @@
             25615006.1
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "忘记 CurrencyCode = 'CNY'：含 USD/INR 的薪酬会被并进人民币合计，累计虚高。",
@@ -5579,7 +5579,7 @@
             171
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 INNER JOIN：公司、厂/中心这些“不直接挂人”的层级整层消失，结果只剩 2 行，看起来像上层组织不存在。",
@@ -5703,7 +5703,7 @@
             "2023-07-27"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "起始日写成 < '2025-12-31'：石浩（10033）当天入职被排除，12 行变 11 行——区间起点必须用 <= 才能含当天。",
@@ -5753,10 +5753,10 @@
       ],
       "stem": "月末核对「基准日 2026-06-30 有多少在职任职记录」，直接 COUNT(*) 得到 180，汇报口径却是 174 人；差额来自 6 个既担任主职、又带一段兼岗/借调在身的人，他们没离职，只是同时有利段。",
       "requirement": "在基准日 2026-06-30 时点，统计在效任职记录（StartDate <= '2026-06-30' 且（EndDate 为空 或 EndDate >= '2026-06-30'），不限是否主职）的三个数：①在效任职段数；②在效任职涉及的去重工号数；③在上述在效记录中出现两段及以上的工号数。输出三行「口径/数值」。",
-      "output_hint": "两列：口径、数值。",
+      "output_hint": "两列：口径、数值；按 ①在效任职段数 ②在效任职去重工号数 ③多段在效工号数 的顺序。",
       "hint": "「段数」和「人数」是两个口径：段把每个人的每一段都计一次，人要去重；「两段及以上」要先按工号分组数段数再筛出来。",
-      "reference_sql": "SELECT '在效任职段数' AS 口径, COUNT(*) AS 数值\nFROM dbo.HR_ASSIGNMENT\nWHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\nUNION ALL\nSELECT '在效任职去重工号数', COUNT(DISTINCT EmpNo)\nFROM dbo.HR_ASSIGNMENT\nWHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\nUNION ALL\nSELECT '多段在效工号数', COUNT(*)\nFROM (\n    SELECT EmpNo\n    FROM dbo.HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    GROUP BY EmpNo\n    HAVING COUNT(*) >= 2\n) AS t;",
-      "reference_sql_sqlite": "SELECT '在效任职段数' AS 口径, COUNT(*) AS 数值\nFROM HR_ASSIGNMENT\nWHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\nUNION ALL\nSELECT '在效任职去重工号数', COUNT(DISTINCT EmpNo)\nFROM HR_ASSIGNMENT\nWHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\nUNION ALL\nSELECT '多段在效工号数', COUNT(*)\nFROM (\n    SELECT EmpNo\n    FROM HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    GROUP BY EmpNo\n    HAVING COUNT(*) >= 2\n) AS t;",
+      "reference_sql": "SELECT 口径, 数值\nFROM (\n    SELECT 1 AS k, '在效任职段数' AS 口径, COUNT(*) AS 数值\n    FROM dbo.HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    UNION ALL\n    SELECT 2, '在效任职去重工号数', COUNT(DISTINCT EmpNo)\n    FROM dbo.HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    UNION ALL\n    SELECT 3, '多段在效工号数', COUNT(*)\n    FROM (\n        SELECT EmpNo\n        FROM dbo.HR_ASSIGNMENT\n        WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n        GROUP BY EmpNo\n        HAVING COUNT(*) >= 2\n    ) AS t\n) AS s\nORDER BY k;",
+      "reference_sql_sqlite": "SELECT 口径, 数值\nFROM (\n    SELECT 1 AS k, '在效任职段数' AS 口径, COUNT(*) AS 数值\n    FROM HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    UNION ALL\n    SELECT 2, '在效任职去重工号数', COUNT(DISTINCT EmpNo)\n    FROM HR_ASSIGNMENT\n    WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    UNION ALL\n    SELECT 3, '多段在效工号数', COUNT(*)\n    FROM (\n        SELECT EmpNo\n        FROM HR_ASSIGNMENT\n        WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n        GROUP BY EmpNo\n        HAVING COUNT(*) >= 2\n    ) AS t\n) AS s\nORDER BY k;",
       "expected": {
         "columns": [
           "口径",
@@ -5777,7 +5777,7 @@
             6
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "把「段数」当成「人数」汇报：180 段里有 6 个人各占了 2 段，人数是 174，二者不是一回事。",
@@ -6099,7 +6099,7 @@
             "2026-04-05"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "漏掉第二排序键(ID)：同一人若两段起始日相同，ROW_NUMBER 的结果不确定，「每人一行」会随执行顺序变化。",
@@ -6459,7 +6459,7 @@
             2.7
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 COUNT(*) 当分母：算的是「人数占比」，不是「薪酬占比」。",
@@ -6925,7 +6925,7 @@
             2
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "忘记 PARTITION BY 直接 ROW_NUMBER：变成全库年薪总排名，前 3 名只来自一个班组。",
@@ -7151,7 +7151,7 @@
             "总公司 / 研发中心 / 测试部 / 可靠性测试组"
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用 OrgLevel = 4 当叶子：本库有 4 个部门(Level=3)也没有下属班组，同样是叶子；按 Level=4 会漏掉它们（27 行变 23 行）。",
@@ -7436,7 +7436,7 @@
             333.33
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "用花名册在职人数当实配：与编制所在的「组织+岗位」粒度对不上，执行率会失真。",
@@ -7486,7 +7486,7 @@
       ],
       "stem": "人力核查要一张「超编岗位」清单：实配超过编制的岗位。视图里 GapCount = 编制 - 实配，小于 0 就是超编。有人把「超编」看成「编制为 0」，漏掉一大批实配多于编制的岗位。",
       "requirement": "用视图 V_ORG_HEADCOUNT，列出超编(GapCount < 0)的岗位，输出岗位编码、组织名、岗位名、编制数、实配数、超编数(=实配-编制)、超编率(=超编数/编制×100，保留2位)。按超编数降序、超编率降序、岗位编码升序，取前 10 行。",
-      "output_hint": "七列：岗位编码、组织名、岗位名、编制数、实配数、超编数、超编率(%)。",
+      "output_hint": "七列：岗位编码、组织名、岗位名、编制数、实配数、超编数、超编率(%)；按超编数降序、超编率降序、岗位编码升序。",
       "hint": "超编 = 实配 > 编制，等价于视图的 GapCount < 0；超编率的分母是编制数，不是实配数。",
       "reference_sql": "SELECT TOP 10 PositionCode AS 岗位编码, OrgName AS 组织名, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, -GapCount AS 超编数,\n       ROUND(100.0 * (-GapCount) / PlanCount, 2) AS 超编率\nFROM dbo.V_ORG_HEADCOUNT\nWHERE GapCount < 0\nORDER BY 超编数 DESC, 超编率 DESC, PositionCode ASC;",
       "reference_sql_sqlite": "SELECT PositionCode AS 岗位编码, OrgName AS 组织名, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, -GapCount AS 超编数,\n       ROUND(100.0 * (-GapCount) / PlanCount, 2) AS 超编率\nFROM V_ORG_HEADCOUNT\nWHERE GapCount < 0\nORDER BY 超编数 DESC, 超编率 DESC, PositionCode ASC\nLIMIT 10;",
@@ -7669,7 +7669,7 @@
             3
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "WHERE Title = '部门' 查到 0 行：字典里该标题是 '部门 '（尾随一个空格），精确等值匹配不到。",
@@ -7719,7 +7719,7 @@
       ],
       "stem": "招聘要盯「每个组织里最缺人的岗位」，缺口 = 编制 - 实配（可为负）。有人在视图外又加了 ActualCount > 0，把「一个人都没配、整编制都空着」的岗位筛掉了——这些恰恰是缺口最大的。",
       "requirement": "用视图 V_ORG_HEADCOUNT，按组织分组，取每个组织内 GapCount 最大的岗位（并列时取岗位编码较小者）。输出组织编码、组织名、岗位编码、岗位名、编制数、实配数、缺口数(GapCount)。按缺口数降序、组织编码升序（每个有编制岗位的组织一行）。",
-      "output_hint": "七列：组织编码、组织名、岗位编码、岗位名、编制数、实配数、缺口数。",
+      "output_hint": "七列：组织编码、组织名、岗位编码、岗位名、编制数、实配数、缺口数；按缺口数降序、组织编码升序。",
       "hint": "缺口 = 编制 - 实配，整编制空缺（实配 0）的岗位缺口最大，不能被过滤掉；组内用窗口排序拿第一行。",
       "reference_sql": "SELECT OrgCode AS 组织编码, OrgName AS 组织名, PositionCode AS 岗位编码, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, GapCount AS 缺口数\nFROM (\n    SELECT o.OrgCode, v.OrgName, v.PositionCode, v.JobName, v.PlanCount, v.ActualCount, v.GapCount,\n           ROW_NUMBER() OVER (PARTITION BY v.OrgID ORDER BY v.GapCount DESC, v.PositionCode) AS rn\n    FROM dbo.V_ORG_HEADCOUNT AS v\n    JOIN dbo.HR_ORG AS o ON o.ID = v.OrgID\n) AS x\nWHERE rn = 1\nORDER BY GapCount DESC, OrgCode ASC;",
       "reference_sql_sqlite": "SELECT OrgCode AS 组织编码, OrgName AS 组织名, PositionCode AS 岗位编码, JobName AS 岗位名,\n       PlanCount AS 编制数, ActualCount AS 实配数, GapCount AS 缺口数\nFROM (\n    SELECT o.OrgCode, v.OrgName, v.PositionCode, v.JobName, v.PlanCount, v.ActualCount, v.GapCount,\n           ROW_NUMBER() OVER (PARTITION BY v.OrgID ORDER BY v.GapCount DESC, v.PositionCode) AS rn\n    FROM V_ORG_HEADCOUNT AS v\n    JOIN HR_ORG AS o ON o.ID = v.OrgID\n) AS x\nWHERE rn = 1\nORDER BY GapCount DESC, OrgCode ASC;",
@@ -8057,7 +8057,7 @@
             -0.65
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "首月环比硬填 0 或 100：第一个月没有上月，环比应是空(NULL)，填 0 会误导成「持平」。",
@@ -8143,7 +8143,7 @@
             0
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "pitfalls": [
         "直接 GROUP BY 入职月份：只会得到有入职的 5 个月，缺 2026-06；用月份清单 LEFT JOIN 才不会断。",
@@ -10810,7 +10810,7 @@
       ],
       "stem": "管理层要看“一级单位在编人数”的走势，最好的形式是行=单位、列=月份的一张网格。数据库里没有现成的网格表，要么在查询里把月份“横过来”（条件聚合），要么在报表工具里做透视。有人硬写六个子查询，又慢又容易错。",
       "requirement": "输出一张交叉表：每行一个一级单位（OrgLevel=2），列为 2026-01 至 2026-06 六个月，单元格=该月末在效的“主职”人数（同一个人只计一次）。口径：①在编=该月最后一天仍在效的主职任职(IsPrimary=1)，同一个月同一单位的人按人去重；②一级单位=任职所在组织的第 2 层祖先；③没有在编人员的单位其各月显示 0。列标题用 2026-01…2026-06。按组织 ID 升序。",
-      "output_hint": "七列：一级单位、2026-01、2026-02、2026-03、2026-04、2026-05、2026-06。",
+      "output_hint": "七列：一级单位、2026-01、2026-02、2026-03、2026-04、2026-05、2026-06；按一级单位升序。",
       "hint": "交叉表在 SQL 里就是“分组 + 条件聚合”：把月份拆成多个 CASE，每个月都“只看该月且仍在效”的任职。记得先按 (单位, 月) 去重人数，再横过来，否则一人多段会被重复计数。",
       "reference_sql": "WITH org AS (\n    SELECT ID, OrgName FROM dbo.HR_ORG WHERE OrgLevel = 2\n),\nm AS (\n    SELECT ym, EOMONTH(CAST(ym + '01' AS date)) AS monthend\n    FROM (VALUES ('202601'),('202602'),('202603'),('202604'),('202605'),('202606')) AS v(ym)\n),\na AS (\n    SELECT a.EmpNo, a.StartDate, a.EndDate,\n        CASE WHEN o.OrgLevel = 2 THEN o.ID\n             WHEN o.OrgLevel = 3 THEN o.ParentID\n             WHEN o.OrgLevel = 4 THEN (SELECT p.ParentID FROM dbo.HR_ORG p WHERE p.ID = o.ParentID)\n        END AS Lev2ID\n    FROM dbo.HR_ASSIGNMENT a JOIN dbo.HR_ORG o ON o.ID = a.OrgID\n    WHERE a.IsPrimary = 1\n),\nbase AS (\n    SELECT org.ID AS OrgID, m.ym AS ym, COUNT(DISTINCT a.EmpNo) AS cnt\n    FROM org CROSS JOIN m JOIN a ON a.Lev2ID = org.ID\n        AND a.StartDate <= m.monthend AND (a.EndDate IS NULL OR a.EndDate >= m.monthend)\n    GROUP BY org.ID, m.ym\n)\nSELECT org.OrgName AS 一级单位,\n    ISNULL(SUM(CASE WHEN base.ym = '202601' THEN base.cnt END), 0) AS [2026-01],\n    ISNULL(SUM(CASE WHEN base.ym = '202602' THEN base.cnt END), 0) AS [2026-02],\n    ISNULL(SUM(CASE WHEN base.ym = '202603' THEN base.cnt END), 0) AS [2026-03],\n    ISNULL(SUM(CASE WHEN base.ym = '202604' THEN base.cnt END), 0) AS [2026-04],\n    ISNULL(SUM(CASE WHEN base.ym = '202605' THEN base.cnt END), 0) AS [2026-05],\n    ISNULL(SUM(CASE WHEN base.ym = '202606' THEN base.cnt END), 0) AS [2026-06]\nFROM org LEFT JOIN base ON base.OrgID = org.ID\nGROUP BY org.ID, org.OrgName\nORDER BY org.ID;",
       "reference_sql_sqlite": "WITH org AS (\n    SELECT ID, OrgName FROM HR_ORG WHERE OrgLevel = 2\n),\nv(ym) AS (VALUES ('202601'),('202602'),('202603'),('202604'),('202605'),('202606')),\nm AS (\n    SELECT ym, date(substr(ym,1,4)||'-'||substr(ym,5,2)||'-01','+1 months','-1 days') AS monthend FROM v\n),\na AS (\n    SELECT a.EmpNo, a.StartDate, a.EndDate,\n        CASE WHEN o.OrgLevel = 2 THEN o.ID\n             WHEN o.OrgLevel = 3 THEN o.ParentID\n             WHEN o.OrgLevel = 4 THEN (SELECT ParentID FROM HR_ORG p WHERE p.ID = o.ParentID)\n        END AS Lev2ID\n    FROM HR_ASSIGNMENT a JOIN HR_ORG o ON o.ID = a.OrgID\n    WHERE a.IsPrimary = 1\n),\nbase AS (\n    SELECT org.ID AS OrgID, m.ym AS ym, COUNT(DISTINCT a.EmpNo) AS cnt\n    FROM org CROSS JOIN m JOIN a ON a.Lev2ID = org.ID\n        AND a.StartDate <= m.monthend AND (a.EndDate IS NULL OR a.EndDate >= m.monthend)\n    GROUP BY org.ID, m.ym\n)\nSELECT org.OrgName AS 一级单位,\n    IFNULL(SUM(CASE WHEN base.ym = '202601' THEN base.cnt END), 0) AS [2026-01],\n    IFNULL(SUM(CASE WHEN base.ym = '202602' THEN base.cnt END), 0) AS [2026-02],\n    IFNULL(SUM(CASE WHEN base.ym = '202603' THEN base.cnt END), 0) AS [2026-03],\n    IFNULL(SUM(CASE WHEN base.ym = '202604' THEN base.cnt END), 0) AS [2026-04],\n    IFNULL(SUM(CASE WHEN base.ym = '202605' THEN base.cnt END), 0) AS [2026-05],\n    IFNULL(SUM(CASE WHEN base.ym = '202606' THEN base.cnt END), 0) AS [2026-06]\nFROM org LEFT JOIN base ON base.OrgID = org.ID\nGROUP BY org.ID, org.OrgName\nORDER BY org.ID;",
@@ -11047,7 +11047,7 @@
       ],
       "stem": "同一张覆盖表，换一种要求：不要部门明细，只要“每个一级单位的小计 + 一行总计”。这时用 ROLLUP(单位,部门) 会连部门明细一起吐出来，多算一层。SQL Server 的 GROUPING SETS 可以精确指定“只要哪些分组”，SQLite 仍是手拼。",
       "requirement": "只输出各一级单位在编人数的小计行与一行全公司总计。输出三列：行类型（小计/总计）、一级单位、在编人数。口径：①在编=基准日 2026-06-30 在效主职任职(IsPrimary=1)，按人去重；②一级单位=第 2 层祖先；③小计行=各单位合计（一级单位有值），总计行=全公司合计（一级单位列为空）。按一级单位升序，总计行最后。",
-      "output_hint": "三列：行类型、一级单位、在编人数；3 行小计 + 1 行总计。",
+      "output_hint": "三列：行类型、一级单位、在编人数；3 行小计 + 1 行总计；小计行在前、总计行在后，小计行按一级单位升序。",
       "hint": "你要的分组只有两种：“按一级单位”和“不分组”。SQL Server 的 GROUPING SETS((一级单位),()) 正好表达这两组；SQLite 用两次 GROUP BY（一次按单位、一次全表）UNION ALL。",
       "reference_sql": "WITH src AS (\n    SELECT p.OrgName AS 一级单位\n    FROM dbo.HR_ASSIGNMENT a\n    JOIN dbo.HR_ORG o ON o.ID = a.OrgID\n    JOIN dbo.HR_ORG d ON d.ID = CASE WHEN o.OrgLevel = 3 THEN o.ID ELSE o.ParentID END\n    JOIN dbo.HR_ORG p ON p.ID = d.ParentID\n    WHERE a.IsPrimary = 1 AND a.StartDate <= '2026-06-30'\n      AND (a.EndDate IS NULL OR a.EndDate >= '2026-06-30')\n)\nSELECT CASE WHEN GROUPING(一级单位) = 1 THEN '总计' ELSE '小计' END AS 行类型,\n       一级单位, COUNT(*) AS 在编人数\nFROM src\nGROUP BY GROUPING SETS ((一级单位), ())\nORDER BY CASE 行类型 WHEN '小计' THEN 1 ELSE 2 END, 一级单位;",
       "reference_sql_sqlite": "WITH src AS (\n    SELECT p.OrgName AS 一级单位\n    FROM HR_ASSIGNMENT a\n    JOIN HR_ORG o ON o.ID = a.OrgID\n    JOIN HR_ORG d ON d.ID = CASE WHEN o.OrgLevel = 3 THEN o.ID ELSE o.ParentID END\n    JOIN HR_ORG p ON p.ID = d.ParentID\n    WHERE a.IsPrimary = 1 AND a.StartDate <= '2026-06-30'\n      AND (a.EndDate IS NULL OR a.EndDate >= '2026-06-30')\n)\nSELECT * FROM (\n    SELECT '小计' AS 行类型, 一级单位, COUNT(*) AS 在编人数 FROM src GROUP BY 一级单位\n    UNION ALL\n    SELECT '总计', NULL, COUNT(*) FROM src\n)\nORDER BY CASE 行类型 WHEN '小计' THEN 1 ELSE 2 END, 一级单位;",
@@ -11370,10 +11370,10 @@
       ],
       "stem": "薪酬分析会要看“钱的构成”：基本盘占多少、绩效占多少、津贴加班占多少。三个 HR 交上来的应发口径不一样，有人把扣款也算进“构成”，还用了实发作分母，导致占比加起来超过 100%。",
       "requirement": "统计 2026-06 的薪酬结构。口径：仅统计币种为人民币(CNY)的薪酬记录。输出五行，每行三列：项目、金额、占应发比例(%)。项目依次为：基本工资(BaseSalary)、绩效奖金(PerfBonus)、津贴(Allowance)、加班费(OvertimePay)、扣款(Deduction)。金额=该项目全月合计（保留 2 位小数）；占应发比例=该项目合计 ÷ 当月 CNY 应发合计(GrossPay) ×100（保留 1 位小数）。空值按 0 参与合计。",
-      "output_hint": "三列：项目、金额、占应发比例。",
+      "output_hint": "三列：项目、金额、占应发比例；按 基本工资、绩效奖金、津贴、加班费、扣款 的顺序。",
       "hint": "分母是“应发合计(GrossPay)”，不是“实发(NetPay)”。四个应发项目之和通常等于应发；扣款是减项——题目要的是“占应发”的比例，别被“扣款是减项”带偏。",
-      "reference_sql": "SELECT '基本工资' AS 项目, ROUND(SUM(BaseSalary), 2) AS 金额,\n       ROUND(100.0 * SUM(BaseSalary) / SUM(GrossPay), 1) AS 占应发比例\nFROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '绩效奖金', ROUND(SUM(PerfBonus), 2), ROUND(100.0 * SUM(PerfBonus) / SUM(GrossPay), 1)\nFROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '津贴', ROUND(SUM(Allowance), 2), ROUND(100.0 * SUM(Allowance) / SUM(GrossPay), 1)\nFROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '加班费', ROUND(SUM(OvertimePay), 2), ROUND(100.0 * SUM(OvertimePay) / SUM(GrossPay), 1)\nFROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '扣款', ROUND(SUM(Deduction), 2), ROUND(100.0 * SUM(Deduction) / SUM(GrossPay), 1)\nFROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY';",
-      "reference_sql_sqlite": "SELECT '基本工资' AS 项目, ROUND(SUM(BaseSalary), 2) AS 金额,\n       ROUND(100.0 * SUM(BaseSalary) / SUM(GrossPay), 1) AS 占应发比例\nFROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '绩效奖金', ROUND(SUM(PerfBonus), 2), ROUND(100.0 * SUM(PerfBonus) / SUM(GrossPay), 1)\nFROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '津贴', ROUND(SUM(Allowance), 2), ROUND(100.0 * SUM(Allowance) / SUM(GrossPay), 1)\nFROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '加班费', ROUND(SUM(OvertimePay), 2), ROUND(100.0 * SUM(OvertimePay) / SUM(GrossPay), 1)\nFROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\nUNION ALL\nSELECT '扣款', ROUND(SUM(Deduction), 2), ROUND(100.0 * SUM(Deduction) / SUM(GrossPay), 1)\nFROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY';",
+      "reference_sql": "SELECT 项目, 金额, 占应发比例\nFROM (\n    SELECT 1 AS k, '基本工资' AS 项目, ROUND(SUM(BaseSalary), 2) AS 金额,\n           ROUND(100.0 * SUM(BaseSalary) / SUM(GrossPay), 1) AS 占应发比例\n    FROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 2, '绩效奖金', ROUND(SUM(PerfBonus), 2), ROUND(100.0 * SUM(PerfBonus) / SUM(GrossPay), 1)\n    FROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 3, '津贴', ROUND(SUM(Allowance), 2), ROUND(100.0 * SUM(Allowance) / SUM(GrossPay), 1)\n    FROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 4, '加班费', ROUND(SUM(OvertimePay), 2), ROUND(100.0 * SUM(OvertimePay) / SUM(GrossPay), 1)\n    FROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 5, '扣款', ROUND(SUM(Deduction), 2), ROUND(100.0 * SUM(Deduction) / SUM(GrossPay), 1)\n    FROM dbo.HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n) AS s\nORDER BY k;",
+      "reference_sql_sqlite": "SELECT 项目, 金额, 占应发比例\nFROM (\n    SELECT 1 AS k, '基本工资' AS 项目, ROUND(SUM(BaseSalary), 2) AS 金额,\n           ROUND(100.0 * SUM(BaseSalary) / SUM(GrossPay), 1) AS 占应发比例\n    FROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 2, '绩效奖金', ROUND(SUM(PerfBonus), 2), ROUND(100.0 * SUM(PerfBonus) / SUM(GrossPay), 1)\n    FROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 3, '津贴', ROUND(SUM(Allowance), 2), ROUND(100.0 * SUM(Allowance) / SUM(GrossPay), 1)\n    FROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 4, '加班费', ROUND(SUM(OvertimePay), 2), ROUND(100.0 * SUM(OvertimePay) / SUM(GrossPay), 1)\n    FROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n    UNION ALL\n    SELECT 5, '扣款', ROUND(SUM(Deduction), 2), ROUND(100.0 * SUM(Deduction) / SUM(GrossPay), 1)\n    FROM HR_SALARY WHERE SalaryMonth = '202606' AND CurrencyCode = 'CNY'\n) AS s\nORDER BY k;",
       "type_tag": "口径陷阱题",
       "pitfalls": [
         "分母用 NetPay(实发)：实发=应发−扣款，占比之和会超过 100%（因为分母被扣款缩小了）。",
@@ -11422,7 +11422,7 @@
             1.9
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "forbidden_syntax": [
         "CONVERT",
@@ -12965,10 +12965,10 @@
       ],
       "stem": "审计任职表，先要按“相对基准日的位置”把任职段分清楚，否则各种“在职口径”的分母都会算错。",
       "requirement": "对全表任职段，按基准日 2026-06-30 分三类计数：①在效：StartDate ≤ 2026-06-30 且（EndDate 为空 或 EndDate ≥ 2026-06-30）；②已结束：EndDate 不为空 且 EndDate < 2026-06-30；③未开始：StartDate > 2026-06-30。输出：分类、段数，三行（分类名用“在效任职段/已结束任职段/未开始任职段”）。",
-      "output_hint": "两列：分类、段数。",
+      "output_hint": "两列：分类、段数；按 ①在效 ②已结束 ③未开始 的顺序。",
       "hint": "三类互斥，合计应等于任职段总数；注意“等于基准日”的段归在效。",
-      "reference_sql": "SELECT '在效任职段' AS 分类, COUNT(*) AS 段数 FROM dbo.HR_ASSIGNMENT\n  WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\nUNION ALL\nSELECT '已结束任职段', COUNT(*) FROM dbo.HR_ASSIGNMENT\n  WHERE EndDate IS NOT NULL AND EndDate < '2026-06-30'\nUNION ALL\nSELECT '未开始任职段', COUNT(*) FROM dbo.HR_ASSIGNMENT\n  WHERE StartDate > '2026-06-30';",
-      "reference_sql_sqlite": "SELECT '在效任职段' AS 分类, COUNT(*) AS 段数 FROM HR_ASSIGNMENT\n  WHERE StartDate<='2026-06-30' AND (EndDate IS NULL OR EndDate>='2026-06-30')\nUNION ALL\nSELECT '已结束任职段', COUNT(*) FROM HR_ASSIGNMENT\n  WHERE EndDate IS NOT NULL AND EndDate<'2026-06-30'\nUNION ALL\nSELECT '未开始任职段', COUNT(*) FROM HR_ASSIGNMENT\n  WHERE StartDate>'2026-06-30';",
+      "reference_sql": "SELECT 分类, 段数\nFROM (\n    SELECT 1 AS k, '在效任职段' AS 分类, COUNT(*) AS 段数 FROM dbo.HR_ASSIGNMENT\n      WHERE StartDate <= '2026-06-30' AND (EndDate IS NULL OR EndDate >= '2026-06-30')\n    UNION ALL\n    SELECT 2, '已结束任职段', COUNT(*) FROM dbo.HR_ASSIGNMENT\n      WHERE EndDate IS NOT NULL AND EndDate < '2026-06-30'\n    UNION ALL\n    SELECT 3, '未开始任职段', COUNT(*) FROM dbo.HR_ASSIGNMENT\n      WHERE StartDate > '2026-06-30'\n) AS s\nORDER BY k;",
+      "reference_sql_sqlite": "SELECT 分类, 段数\nFROM (\n    SELECT 1 AS k, '在效任职段' AS 分类, COUNT(*) AS 段数 FROM HR_ASSIGNMENT\n      WHERE StartDate<='2026-06-30' AND (EndDate IS NULL OR EndDate>='2026-06-30')\n    UNION ALL\n    SELECT 2, '已结束任职段', COUNT(*) FROM HR_ASSIGNMENT\n      WHERE EndDate IS NOT NULL AND EndDate<'2026-06-30'\n    UNION ALL\n    SELECT 3, '未开始任职段', COUNT(*) FROM HR_ASSIGNMENT\n      WHERE StartDate>'2026-06-30'\n) AS s\nORDER BY k;",
       "type_tag": "口径陷阱题",
       "pitfalls": [
         "用 EndDate IS NULL 代替“在效”：漏掉“结束日 ≥ 基准日”的实际在效段，在效数偏小。",
@@ -13002,7 +13002,7 @@
             0
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "forbidden_syntax": [
         "CONVERT",
@@ -14158,10 +14158,10 @@
       ],
       "stem": "做离职报表时，有人从任职表的“离职”动作取数，有人从花名册的离职日取数，两边对不上就会吵架。",
       "requirement": "分别统计：①任职表(HR_ASSIGNMENT)中 ActionCode='LEAVE' 的段数；②花名册(HR_EMPLOYEE)中 TermDate 不为空的人数；③两处“离职日”不一致的段数（任职表 LEAVE 段的 EndDate 与对应员工 TermDate 不相等，且含员工 TermDate 为空的情形）。输出：口径、数值，三行（口径名用“任职表 LEAVE 段数/花名册 TermDate 非空人数/两处离职日不一致的段数”）。",
-      "output_hint": "两列：口径、数值。",
+      "output_hint": "两列：口径、数值；按 ①任职表 LEAVE 段数 ②花名册 TermDate 非空人数 ③两处离职日不一致的段数 的顺序。",
       "hint": "前两个各是一次数数；第三个要把任职表的离职段和花名册对齐后逐段比较离职日。",
-      "reference_sql": "SELECT '任职表 LEAVE 段数' AS 口径, COUNT(*) AS 数值\n  FROM dbo.HR_ASSIGNMENT WHERE ActionCode = 'LEAVE'\nUNION ALL\nSELECT '花名册 TermDate 非空人数', COUNT(*)\n  FROM dbo.HR_EMPLOYEE WHERE TermDate IS NOT NULL\nUNION ALL\nSELECT '两处离职日不一致的段数', COUNT(*)\n  FROM dbo.HR_ASSIGNMENT AS a\n  JOIN dbo.HR_EMPLOYEE AS e ON e.EmpNo = a.EmpNo\n  WHERE a.ActionCode = 'LEAVE' AND (e.TermDate IS NULL OR e.TermDate <> a.EndDate);",
-      "reference_sql_sqlite": "SELECT '任职表 LEAVE 段数' AS 口径, COUNT(*) AS 数值\n  FROM HR_ASSIGNMENT WHERE ActionCode='LEAVE'\nUNION ALL\nSELECT '花名册 TermDate 非空人数', COUNT(*) FROM HR_EMPLOYEE WHERE TermDate IS NOT NULL\nUNION ALL\nSELECT '两处离职日不一致的段数', COUNT(*)\n  FROM HR_ASSIGNMENT a JOIN HR_EMPLOYEE e ON e.EmpNo=a.EmpNo\n  WHERE a.ActionCode='LEAVE' AND (e.TermDate IS NULL OR e.TermDate<>a.EndDate);",
+      "reference_sql": "SELECT 口径, 数值\nFROM (\n    SELECT 1 AS k, '任职表 LEAVE 段数' AS 口径, COUNT(*) AS 数值\n      FROM dbo.HR_ASSIGNMENT WHERE ActionCode = 'LEAVE'\n    UNION ALL\n    SELECT 2, '花名册 TermDate 非空人数', COUNT(*)\n      FROM dbo.HR_EMPLOYEE WHERE TermDate IS NOT NULL\n    UNION ALL\n    SELECT 3, '两处离职日不一致的段数', COUNT(*)\n      FROM dbo.HR_ASSIGNMENT AS a\n      JOIN dbo.HR_EMPLOYEE AS e ON e.EmpNo = a.EmpNo\n      WHERE a.ActionCode = 'LEAVE' AND (e.TermDate IS NULL OR e.TermDate <> a.EndDate)\n) AS s\nORDER BY k;",
+      "reference_sql_sqlite": "SELECT 口径, 数值\nFROM (\n    SELECT 1 AS k, '任职表 LEAVE 段数' AS 口径, COUNT(*) AS 数值\n      FROM HR_ASSIGNMENT WHERE ActionCode='LEAVE'\n    UNION ALL\n    SELECT 2, '花名册 TermDate 非空人数', COUNT(*) FROM HR_EMPLOYEE WHERE TermDate IS NOT NULL\n    UNION ALL\n    SELECT 3, '两处离职日不一致的段数', COUNT(*)\n      FROM HR_ASSIGNMENT a JOIN HR_EMPLOYEE e ON e.EmpNo=a.EmpNo\n      WHERE a.ActionCode='LEAVE' AND (e.TermDate IS NULL OR e.TermDate<>a.EndDate)\n) AS s\nORDER BY k;",
       "type_tag": "口径陷阱题",
       "pitfalls": [
         "用 COUNT(*) COUNT 花名册全表当“离职人数”：那是总人数 200，不是离职人数。",
@@ -14195,7 +14195,7 @@
             0
           ]
         ],
-        "order_sensitive": false
+        "order_sensitive": true
       },
       "forbidden_syntax": [
         "CONVERT",
@@ -14299,7 +14299,7 @@
       ],
       "stem": "半年人力报告的第一张表：各一级单位年初、年中各多少人，涨了还是跌了。",
       "requirement": "按一级单位(OrgLevel=2 的组织)分别统计 2025-12-31 与 2026-06-30 两个时点的主职在册人数（按人去重）；员工的单位按其“当时有效主职任职”所在组织向上归到一级单位。任职有效口径：StartDate ≤ 时点 且 (EndDate 为空 或 EndDate ≥ 时点)，只算主职(IsPrimary=1)。输出：一级单位、期初_20251231、期末_20260630，按一级单位原始顺序排列；每个一级单位都要出现（无人的显示 0）。",
-      "output_hint": "三列：一级单位、期初_20251231、期末_20260630（每个一级单位一行）。",
+      "output_hint": "三列：一级单位、期初_20251231、期末_20260630；按一级单位升序（每个一级单位一行）。",
       "hint": "先把每个组织映射到所属一级单位，再分别按两个时点聚合人数，最后按单位对齐。",
       "reference_sql": "WITH map AS (\n    SELECT o.ID AS orgid,\n           CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                           WHEN 4 THEN (SELECT ParentID FROM dbo.HR_ORG AS x WHERE x.ID = o.ParentID)\n           END AS top2id\n    FROM dbo.HR_ORG AS o),\ns1 AS (SELECT a.EmpNo, map.top2id FROM dbo.HR_ASSIGNMENT AS a JOIN map ON map.orgid = a.OrgID\n       WHERE a.IsPrimary = 1 AND a.StartDate <= '2025-12-31'\n         AND (a.EndDate IS NULL OR a.EndDate >= '2025-12-31')),\ns2 AS (SELECT a.EmpNo, map.top2id FROM dbo.HR_ASSIGNMENT AS a JOIN map ON map.orgid = a.OrgID\n       WHERE a.IsPrimary = 1 AND a.StartDate <= '2026-06-30'\n         AND (a.EndDate IS NULL OR a.EndDate >= '2026-06-30'))\nSELECT p.OrgName AS 一级单位,\n       (SELECT COUNT(DISTINCT EmpNo) FROM s1 WHERE top2id = p.ID) AS 期初_20251231,\n       (SELECT COUNT(DISTINCT EmpNo) FROM s2 WHERE top2id = p.ID) AS 期末_20260630\nFROM dbo.HR_ORG AS p\nWHERE p.OrgLevel = 2\nORDER BY p.ID;",
       "reference_sql_sqlite": "WITH map AS (\n  SELECT o.ID AS orgid,\n    CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                    WHEN 4 THEN (SELECT ParentID FROM HR_ORG x WHERE x.ID=o.ParentID) END AS top2id\n  FROM HR_ORG o),\ns1 AS (SELECT a.EmpNo AS EmpNo, map.top2id AS top2id FROM HR_ASSIGNMENT a JOIN map ON map.orgid=a.OrgID\n  WHERE a.IsPrimary=1 AND a.StartDate<='2025-12-31' AND (a.EndDate IS NULL OR a.EndDate>='2025-12-31')),\ns2 AS (SELECT a.EmpNo AS EmpNo, map.top2id AS top2id FROM HR_ASSIGNMENT a JOIN map ON map.orgid=a.OrgID\n  WHERE a.IsPrimary=1 AND a.StartDate<='2026-06-30' AND (a.EndDate IS NULL OR a.EndDate>='2026-06-30'))\nSELECT p.OrgName AS 一级单位,\n  (SELECT COUNT(DISTINCT EmpNo) FROM s1 WHERE top2id=p.ID) AS 期初_20251231,\n  (SELECT COUNT(DISTINCT EmpNo) FROM s2 WHERE top2id=p.ID) AS 期末_20260630\nFROM HR_ORG p WHERE p.OrgLevel=2 ORDER BY p.ID;",
@@ -14448,7 +14448,7 @@
       ],
       "stem": "盘点各单位的“人脉年份”：最早什么时候有人来、最近一次来人是什么时候。",
       "requirement": "对每个一级单位(OrgLevel=2)，统计其下全部组织的任职段：最早一段任职的起始日、最近一段任职的起始日、任职段总数（不区分主职/兼岗；只统计该一级单位子树内的任职段）。输出：一级单位、最早任职起始、最近任职起始、任职段数，按一级单位原始顺序排列（只列出有任职段的单位）。",
-      "output_hint": "四列：一级单位、最早任职起始、最近任职起始、任职段数。",
+      "output_hint": "四列：一级单位、最早任职起始、最近任职起始、任职段数；按一级单位升序。",
       "hint": "先把任职段归到一级单位，再对该单位取起点日的最小值与最大值并计数。",
       "reference_sql": "WITH map AS (\n    SELECT o.ID AS orgid,\n           CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                           WHEN 4 THEN (SELECT ParentID FROM dbo.HR_ORG AS x WHERE x.ID = o.ParentID)\n           END AS top2id\n    FROM dbo.HR_ORG AS o)\nSELECT p.OrgName AS 一级单位,\n       MIN(a.StartDate) AS 最早任职起始, MAX(a.StartDate) AS 最近任职起始, COUNT(*) AS 任职段数\nFROM dbo.HR_ASSIGNMENT AS a\nJOIN map ON map.orgid = a.OrgID\nJOIN dbo.HR_ORG AS p ON p.ID = map.top2id AND p.OrgLevel = 2\nGROUP BY p.OrgName, p.ID\nORDER BY p.ID;",
       "reference_sql_sqlite": "WITH map AS (\n  SELECT o.ID AS orgid,\n    CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                    WHEN 4 THEN (SELECT ParentID FROM HR_ORG x WHERE x.ID=o.ParentID) END AS top2id\n  FROM HR_ORG o)\nSELECT p.OrgName AS 一级单位,\n  MIN(a.StartDate) AS 最早任职起始, MAX(a.StartDate) AS 最近任职起始, COUNT(*) AS 任职段数\nFROM HR_ASSIGNMENT a\nJOIN map ON map.orgid=a.OrgID\nJOIN HR_ORG p ON p.ID=map.top2id AND p.OrgLevel=2\nGROUP BY p.OrgName ORDER BY p.ID;",
@@ -14528,7 +14528,7 @@
       ],
       "stem": "一份组织在编表，有人说“只算主职”，有人说“兼岗也要算”。口径不统一，同一个厂能差出好几个人次。",
       "requirement": "按一级单位(OrgLevel=2)，统计基准日 2026-06-30 在效的任职段数：①仅主职口径（只算 IsPrimary=1）；②含兼岗口径（全部在效段，含兼岗/借调）。在效口径：StartDate ≤ 2026-06-30 且 (EndDate 为空 或 EndDate ≥ 2026-06-30)。输出：一级单位、主职在编段数、含兼岗在编段数，按一级单位原始顺序排列，每个一级单位都要出现。",
-      "output_hint": "三列：一级单位、主职在编段数、含兼岗在编段数。",
+      "output_hint": "三列：一级单位、主职在编段数、含兼岗在编段数；按一级单位升序。",
       "hint": "同一批在效段，用条件计数拆成“只数主职”和“全数”两列。",
       "reference_sql": "WITH map AS (\n    SELECT o.ID AS orgid,\n           CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                           WHEN 4 THEN (SELECT ParentID FROM dbo.HR_ORG AS x WHERE x.ID = o.ParentID)\n           END AS top2id\n    FROM dbo.HR_ORG AS o),\nact AS (\n    SELECT a.IsPrimary, map.top2id FROM dbo.HR_ASSIGNMENT AS a JOIN map ON map.orgid = a.OrgID\n    WHERE a.StartDate <= '2026-06-30' AND (a.EndDate IS NULL OR a.EndDate >= '2026-06-30'))\nSELECT p.OrgName AS 一级单位,\n       SUM(CASE WHEN act.IsPrimary = 1 THEN 1 ELSE 0 END) AS 主职在编段数,\n       COUNT(act.IsPrimary) AS 含兼岗在编段数\nFROM (SELECT ID, OrgName FROM dbo.HR_ORG WHERE OrgLevel = 2) AS p\nLEFT JOIN act ON act.top2id = p.ID\nGROUP BY p.ID, p.OrgName\nORDER BY p.ID;",
       "reference_sql_sqlite": "WITH map AS (\n  SELECT o.ID AS orgid,\n    CASE o.OrgLevel WHEN 2 THEN o.ID WHEN 3 THEN o.ParentID\n                    WHEN 4 THEN (SELECT ParentID FROM HR_ORG x WHERE x.ID=o.ParentID) END AS top2id\n  FROM HR_ORG o),\nact AS (\n  SELECT a.IsPrimary AS IsPrimary, map.top2id AS top2id\n  FROM HR_ASSIGNMENT a JOIN map ON map.orgid=a.OrgID\n  WHERE a.StartDate<='2026-06-30' AND (a.EndDate IS NULL OR a.EndDate>='2026-06-30'))\nSELECT p.OrgName AS 一级单位,\n  SUM(CASE WHEN act.IsPrimary=1 THEN 1 ELSE 0 END) AS 主职在编段数,\n  COUNT(act.IsPrimary) AS 含兼岗在编段数\nFROM (SELECT ID,OrgName FROM HR_ORG WHERE OrgLevel=2) p\nLEFT JOIN act ON act.top2id=p.ID\nGROUP BY p.ID, p.OrgName ORDER BY p.ID;",
