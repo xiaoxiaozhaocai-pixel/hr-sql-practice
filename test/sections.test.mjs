@@ -157,3 +157,174 @@ test('nav_keeps_full_denominator_and_marks_section_position', () => {
   assert.match(app, /已定位今日任务，目录筛选已清空/);
   assert.match(app, /待复查/, '已完成与待复查要能同时显示');
 });
+
+/* ---------------------------- 反馈层：动效 / 忙态 / 键盘流（Q3） ---------------------------- */
+
+const readSrc = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const CSS = readSrc('src/style.css');
+const APP = readSrc('src/app.js');
+
+/* 从源码里按大括号配平截出一个具名函数体，供真实执行验证行为（不伪造结论）。 */
+function extractFn(src, name) {
+  const start = src.indexOf('function ' + name + '(');
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = src.indexOf('{', start); i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+const KEYFRAMES = [...CSS.matchAll(/@keyframes\s+([\w-]+)\s*\{([^\n]*)\}/g)];
+
+test('feedback_animation_budget_durations_and_properties_stay_within_limits', () => {
+  assert.ok(KEYFRAMES.length >= 3 && KEYFRAMES.length <= 5,
+    `反馈层 keyframes 数量应在 3..5，实际 ${KEYFRAMES.length}`);
+  const anims = [...CSS.matchAll(/\.(hr-anim-[\w-]+)\s*\{[^}]*animation:\s*([\w-]+)\s+(\d+)ms/g)];
+  assert.equal(anims.length, KEYFRAMES.length, '每个 keyframe 都应有且仅有一条 hr-anim-* 规则引用');
+  const referenced = new Set();
+  for (const [, cls, kf, ms] of anims) {
+    assert.ok(KEYFRAMES.some((m) => m[1] === kf), `${cls} 引用了未定义的 keyframe ${kf}`);
+    assert.ok(Number(ms) >= 160 && Number(ms) <= 260, `${cls} 时长 ${ms}ms 必须落在 160–260ms`);
+    referenced.add(kf);
+  }
+  for (const [, name] of KEYFRAMES) assert.ok(referenced.has(name), `keyframe ${name} 未被任何类引用`);
+  for (const [, name, body] of KEYFRAMES) {
+    const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+    assert.ok(props.length > 0, `${name} 不应是空 keyframe`);
+    for (const p of props) assert.ok(p === 'opacity' || p === 'transform', `${name} 动了 ${p}，只允许 opacity / transform`);
+  }
+  /* 宽度类动效走 transition，不新增 keyframe；keyframes + 宽度过渡合计 ≤ 5 */
+  const w = CSS.match(/\.bar i \{[^}]*transition:\s*width\s+(\d+)ms/);
+  assert.ok(w, '进度条宽度必须用 transition 平滑填充');
+  assert.ok(Number(w[1]) >= 160 && Number(w[1]) <= 260, `进度条宽度过渡 ${w[1]}ms 必须落在 160–260ms`);
+  assert.ok(KEYFRAMES.length + 1 <= 5, 'keyframes + 宽度过渡合计不得超过 5 个动效');
+});
+
+test('feedback_animations_are_disabled_by_reduced_motion', () => {
+  const block = CSS.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(block, '必须有 prefers-reduced-motion 关停块');
+  assert.match(block[1], /\*,\s*\*::before,\s*\*::after/, '关停块必须覆盖全部元素');
+  assert.match(block[1], /animation-duration:\s*0\.001ms\s*!important/);
+  assert.match(block[1], /transition-duration:\s*0\.001ms\s*!important/);
+});
+
+test('feedback_js_animation_classes_are_all_defined_in_css', () => {
+  const used = new Set([...APP.matchAll(/'(hr-anim-[\w-]+)'/g)].map((m) => m[1]));
+  assert.ok(used.size >= 3, `app.js 应至少使用 3 个动效类，实际 ${used.size}`);
+  for (const cls of used) assert.match(CSS, new RegExp('\\.' + cls + '\\s*\\{'), `CSS 缺少 .${cls} 规则`);
+  /* 通过 / 失败两条路径都要有反馈：verdict 淡入，失败额外抖编辑器 */
+  assert.match(APP, /replayAnim\(box, 'hr-anim-fade-up'\)[\s\S]*?replayAnim\(\$\('sql-input'\), 'hr-anim-shake'\)/);
+});
+
+test('result_row_animation_is_capped_and_timer_free', () => {
+  assert.match(APP, /MAX_ROW_ANIM\s*=\s*20/);
+  const fn = extractFn(APP, 'renderTable');
+  assert.ok(fn, 'renderTable 必须存在');
+  assert.match(fn, /i < MAX_ROW_ANIM/, '只给前 MAX_ROW_ANIM 行挂动画');
+  assert.doesNotMatch(fn, /setTimeout|setInterval|requestAnimationFrame/, '行淡入不得堆定时器');
+});
+
+function fakeButton(text) {
+  const attrs = {};
+  return {
+    textContent: text, disabled: false,
+    hasAttribute: (n) => Object.prototype.hasOwnProperty.call(attrs, n),
+    setAttribute: (n, v) => { attrs[n] = String(v); },
+    getAttribute: (n) => (Object.prototype.hasOwnProperty.call(attrs, n) ? attrs[n] : null),
+    removeAttribute: (n) => { delete attrs[n]; }
+  };
+}
+
+test('busy_state_disables_then_restores_both_buttons', () => {
+  const src = extractFn(APP, 'setBusy');
+  assert.ok(src, 'app.js 必须有 setBusy');
+  const setBusy = new Function('return (' + src + ')')();
+  const run = fakeButton('运行');
+  const judge = fakeButton('判题');
+  setBusy(run, true, '运行中…');
+  setBusy(judge, true);
+  assert.equal(run.disabled, true);
+  assert.equal(judge.disabled, true);
+  assert.equal(run.textContent, '运行中…');
+  assert.equal(judge.textContent, '判题', '未给忙态文案的按钮只禁用、不改文案');
+  assert.equal(run.getAttribute('aria-busy'), 'true');
+  assert.equal(judge.getAttribute('aria-busy'), 'true');
+  setBusy(run, false);
+  setBusy(judge, false);
+  assert.equal(run.disabled, false);
+  assert.equal(judge.disabled, false);
+  assert.equal(run.textContent, '运行');
+  assert.equal(run.getAttribute('aria-busy'), null);
+  /* 运行 / 判题都必须同时锁住两个按钮 */
+  assert.match(extractFn(APP, 'doRun'), /setBusy\(\$\('btn-run'\)[\s\S]*setBusy\(\$\('btn-judge'\)/);
+  assert.match(extractFn(APP, 'setJudgeLoading'), /setBusy\(\$\('btn-judge'\)[\s\S]*setBusy\(\$\('btn-run'\)/);
+});
+
+function fakeAnimNode() {
+  const node = {
+    offsetWidth: 320, classes: new Set(), listeners: {},
+    addEventListener(type, h) { node.listeners[type] = h; },
+    removeEventListener(type) { delete node.listeners[type]; }
+  };
+  node.classList = {
+    add(c) { node.classes.add(c); },
+    remove(c) { node.classes.delete(c); }
+  };
+  return node;
+}
+
+test('replay_anim_restarts_and_cleans_up_on_animationend', () => {
+  const src = extractFn(APP, 'replayAnim');
+  assert.ok(src, 'app.js 必须有 replayAnim');
+  const replayAnim = new Function('return (' + src + ')')();
+  const node = fakeAnimNode();
+  replayAnim(node, 'hr-anim-fade-up');
+  assert.ok(node.classes.has('hr-anim-fade-up'), '重放时应挂上动画类');
+  assert.equal(typeof node.listeners.animationend, 'function');
+  /* 子元素冒泡上来的 animationend 不得误清本节点的类 */
+  node.listeners.animationend({ target: {} });
+  assert.ok(node.classes.has('hr-anim-fade-up'));
+  /* 自身动画结束：摘类 + 摘监听，保证可重复重放 */
+  node.listeners.animationend({ target: node });
+  assert.ok(!node.classes.has('hr-anim-fade-up'));
+  assert.equal(node.listeners.animationend, undefined);
+  replayAnim(node, 'hr-anim-fade-up');
+  assert.ok(node.classes.has('hr-anim-fade-up'), '第二次重放仍应生效');
+});
+
+test('suggest_supports_arrow_selection_enter_and_escape', () => {
+  assert.match(APP, /function moveSuggest\(delta\)/);
+  assert.match(APP, /suggestIndex >= 0/, 'Enter 只在有选中项时确认');
+  assert.match(APP, /applySuggest\(pick\)/);
+  const keydown = APP.slice(
+    APP.indexOf("sqlInput.addEventListener('keydown'"),
+    APP.indexOf("sqlInput.addEventListener('input'")
+  );
+  assert.ok(keydown.length > 0, '必须先定位到 sql-input 的 keydown 处理器');
+  assert.match(keydown, /ArrowDown/);
+  assert.match(keydown, /ArrowUp/);
+  assert.match(keydown, /e\.key === 'Enter' && suggestIndex >= 0/);
+  assert.match(keydown, /Escape/);
+  assert.match(keydown, /\(e\.ctrlKey \|\| e\.metaKey\) && e\.key === 'Enter'/, 'Ctrl/Cmd+Enter 运行需保留');
+  /* 键盘高亮类名必须与 CSS 规则对齐 */
+  assert.match(CSS, /\.sql-suggest-item\.is-active/);
+  assert.match(APP, /classList\.toggle\('is-active'/);
+});
+
+const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F2FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+
+test('feedback_layer_adds_no_emoji_and_keeps_record_metrics_out_of_topbar', () => {
+  for (const rel of ['src/style.css', 'src/app.js', 'src/index.html']) {
+    assert.doesNotMatch(readSrc(rel), EMOJI_RE, `${rel} 不得出现 emoji`);
+  }
+  const html = readSrc('src/index.html');
+  const topbar = html.slice(html.indexOf('class="topbar"'), html.indexOf('id="record-panel"'));
+  assert.ok(topbar.length > 0, '必须先定位到顶栏段');
+  assert.doesNotMatch(topbar, /stat-xp|stat-streak|stat-goal/, 'XP / 连续 / 今日目标不得搬回顶栏');
+  assert.match(html, /id="record-panel"[\s\S]*id="stat-xp"/, 'XP 仍留在学习记录面板内');
+});

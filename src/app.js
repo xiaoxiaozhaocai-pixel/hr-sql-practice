@@ -13,6 +13,7 @@
   'use strict';
 
   var MAX_PREVIEW_ROWS = 200;   // 运行结果最多渲染 200 行，超出只提示总行数
+  var MAX_ROW_ANIM = 20;        // 结果行淡入只处理前 20 行，避免一次性堆大量动画
   var BOOT = window.HR_BOOT || {};
   var QUESTIONS = Array.isArray(BOOT.questions) ? BOOT.questions : [];
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
@@ -69,6 +70,8 @@
   var openPanel = null;       // 'drawer' | 'rail' | null
   var lastRun = null;         // { columns, rows }：最近一次「运行」的结果，供结果区 tab 切换
   var filter = { kw: '', diffs: {}, undoneOnly: false };
+  var suggestItems = [];      // 当前补全候选（键盘 ↑/↓ 用）
+  var suggestIndex = -1;      // -1 = 未选中，Enter 保持换行语义
 
   /* ------------------------------ 小工具 ------------------------------ */
   function $(id) { return document.getElementById(id); }
@@ -81,6 +84,21 @@
   }
 
   function show(node, on) { if (node) node.hidden = !on; }
+
+  /* 反馈层：重放一次 CSS 动画。先摘类名再强制回流，保证连续两次判题都能看到动效；
+     动画结束后摘掉类名（reduced-motion 下动画即时结束，行为一致，无定时器）。 */
+  function replayAnim(node, cls) {
+    if (!node || !node.classList) return;
+    node.classList.remove(cls);
+    void node.offsetWidth;
+    node.classList.add(cls);
+    var onEnd = function (e) {
+      if (e.target !== node) return;
+      node.classList.remove(cls);
+      node.removeEventListener('animationend', onEnd);
+    };
+    node.addEventListener('animationend', onEnd);
+  }
 
   function saveProgress() { if (state) L.saveState(storage, state); }
 
@@ -350,6 +368,18 @@
     }
   }
 
+  /* 判题完成后把焦点交给下一步按钮：优先主按钮，其次次按钮；都没露时不抢焦点。 */
+  function focusNextAction() {
+    var box = $('next-action');
+    if (!box || box.hidden) return false;
+    var p = $('btn-next-primary');
+    var s = $('btn-next-secondary');
+    var target = (p && !p.hidden && !p.disabled) ? p : ((s && !s.hidden && !s.disabled) ? s : null);
+    if (!target) return false;
+    try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+    return true;
+  }
+
   /* 段末结算：独立卡片；旧用户回看只展示、不重发 XP。combined=与今日目标合并成一张结算。 */
   function renderSectionSummary(trans, combined) {
     var box = $('section-summary');
@@ -388,6 +418,7 @@
     /* 合并结算：今日小结折进同一张卡，不连弹两次（§5.3 第 1 条）。 */
     if (combined) due.textContent += ' ' + todayWrapText();
     show(box, true);
+    replayAnim(box, 'hr-anim-summary');
     if (trans.firstShown) L.markSectionSummarySeen(state, trans.section);
   }
 
@@ -1141,7 +1172,7 @@
     if (badge) {
       var sec = SECTION_OF[q.id];
       var all = sec && sec.questions.every(function (x) { return state.passed[x.id]; });
-      if (all) { badge.textContent = '第 ' + sec.section + ' 段通关'; show(badge, true); }
+      if (all) { badge.textContent = '第 ' + sec.section + ' 段通关'; show(badge, true); replayAnim(badge, 'hr-anim-pop'); }
       else show(badge, false);
     }
   }
@@ -1179,6 +1210,8 @@
     var n = Math.min(rows.length, limit);
     for (var i = 0; i < n; i++) {
       var r = document.createElement('tr');
+      /* 行是每次渲染重建的 DOM，直接挂动画类即可自动播放；只做前 MAX_ROW_ANIM 行。 */
+      if (i < MAX_ROW_ANIM) r.className = 'hr-anim-fade-up';
       for (var j = 0; j < columns.length; j++) {
         var v = rows[i][j];
         r.appendChild(el('td', v === null || v === undefined ? 'NULL' : String(v)));
@@ -1321,6 +1354,8 @@
     if (info && info.reviewTools && currentQuestion()) attachReviewTools(box, currentQuestion());
     if (info && info.reviewNote) box.appendChild(el('div', info.reviewNote, 'muted'));
     show(box, true);
+    replayAnim(box, 'hr-anim-fade-up');
+    if (kind === 'fail') replayAnim($('sql-input'), 'hr-anim-shake');
   }
 
   function renderRunError(msg) {
@@ -1360,11 +1395,30 @@
     return false;
   }
 
-  function doRun() {
-    if (!requireDb()) return;
+  /* 忙态：运行 / 判题期间禁用按钮、给文案与 aria-busy，结束原样恢复（#live-status 不动）。 */
+  function setBusy(btn, on, busyText) {
+    if (!btn) return;
+    if (on) {
+      if (busyText) {
+        if (!btn.hasAttribute('data-busy-label')) btn.setAttribute('data-busy-label', btn.textContent);
+        btn.textContent = busyText;
+      }
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+    } else {
+      var lbl = btn.getAttribute('data-busy-label');
+      if (lbl !== null) { btn.textContent = lbl; btn.removeAttribute('data-busy-label'); }
+      btn.removeAttribute('aria-busy');
+      btn.disabled = false;
+    }
+  }
+
+  var running = false;
+
+  /* 实际执行抽出来：忙态已就位后再跑，结束时由 doRun 统一恢复按钮。 */
+  function runNow() {
     var q = currentQuestion();
     var sql = $('sql-input').value;
-    if (!sql.trim()) { renderVerdict('warn', '请先写 SQL。', null, null); return; }
     var res;
     try {
       res = window.HRDb.runQuery(db, sql);
@@ -1378,16 +1432,33 @@
     if (q) { state.sql[q.id] = sql; saveProgress(); }
   }
 
+  function doRun() {
+    if (running || judging) return;
+    if (!requireDb()) return;
+    if (!$('sql-input').value.trim()) { renderVerdict('warn', '请先写 SQL。', null, null); return; }
+    running = true;
+    setBusy($('btn-run'), true, '运行中…');
+    setBusy($('btn-judge'), true);   /* 运行期间判题同样禁用，只禁用不改文案 */
+    /* 先让浏览器重绘出忙态，再执行同步查询。 */
+    setTimeout(function () {
+      try { runNow(); }
+      catch (e) { renderRunError(String(e && e.message ? e.message : e)); }
+      finally {
+        running = false;
+        setBusy($('btn-run'), false);
+        setBusy($('btn-judge'), false);
+      }
+    }, 0);
+  }
+
   /* 判题：同步计算，但先给按钮 loading 态让浏览器有机会重绘；不阻塞编辑器输入。 */
   function setJudgeLoading(on) {
-    var b = $('btn-judge');
-    if (!b) return;
-    if (on) { b.setAttribute('data-label', b.textContent); b.textContent = '判题中…'; b.disabled = true; }
-    else { var lbl = b.getAttribute('data-label'); if (lbl) b.textContent = lbl; b.disabled = false; }
+    setBusy($('btn-judge'), on, on ? '判题中…' : null);
+    setBusy($('btn-run'), on);   /* 判题期间运行同样禁用 */
   }
 
   function doJudge() {
-    if (judging) return;
+    if (judging || running) return;
     judging = true;
     /* 判题快照：发起时记下题号，异步回来若已切题就丢弃，不渲染到新题上。 */
     var qid = currentId;
@@ -1517,6 +1588,7 @@
     }
     renderStats();
     renderNav();
+    if (verdict.pass) focusNextAction();
   }
 
   function doAnswer() {
@@ -1585,6 +1657,21 @@
   function hideSuggest() {
     var box = $('sql-suggest');
     if (box) { box.hidden = true; box.textContent = ''; }
+    suggestItems = [];
+    suggestIndex = -1;
+  }
+
+  /* ↑/↓ 在候选间循环移动；Enter 用当前选中项；Esc 由输入框 keydown 负责关闭。 */
+  function moveSuggest(delta) {
+    var box = $('sql-suggest');
+    if (!box || box.hidden || !suggestItems.length) return false;
+    var n = suggestItems.length;
+    if (suggestIndex < 0) suggestIndex = delta > 0 ? 0 : n - 1;
+    else suggestIndex = (suggestIndex + delta + n) % n;
+    var nodes = box.querySelectorAll('.sql-suggest-item');
+    [].forEach.call(nodes, function (node, i) { node.classList.toggle('is-active', i === suggestIndex); });
+    if (nodes[suggestIndex]) nodes[suggestIndex].scrollIntoView({ block: 'nearest' });
+    return true;
   }
 
   function updateSuggest() {
@@ -1594,6 +1681,8 @@
     if (document.activeElement !== ta || ta.selectionStart !== ta.selectionEnd) { hideSuggest(); return; }
     var items = sqlSuggestions(ta.value, ta.selectionStart);
     if (!items.length) { hideSuggest(); return; }
+    suggestItems = items;
+    suggestIndex = -1;
     box.textContent = '';
     items.forEach(function (it) {
       var b = el('button', null, 'sql-suggest-item');
@@ -1656,6 +1745,19 @@
       }
       /* Ctrl / Cmd + Enter 运行 */
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doRun(); return; }
+      /* 补全打开时：↑/↓ 选择、Enter 确认（未选中时保留换行语义） */
+      var sugOpen = (function () { var s = $('sql-suggest'); return !!(s && !s.hidden); })();
+      if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        moveSuggest(e.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (sugOpen && e.key === 'Enter' && suggestIndex >= 0) {
+        e.preventDefault();
+        var pick = suggestItems[suggestIndex];
+        if (pick) applySuggest(pick);
+        return;
+      }
       if (e.key === 'Escape') {
         var sug = $('sql-suggest');
         if (sug && !sug.hidden) { hideSuggest(); return; }
