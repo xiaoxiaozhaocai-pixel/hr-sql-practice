@@ -405,6 +405,7 @@ pre {
 .today-list .t-status { font-size: 12px; color: var(--muted); }
 .today-list li.is-review .t-status { color: var(--accent); }
 .next-action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.next-action[hidden] { display: none; }
 .section-summary, .today-wrap { margin-top: 12px; }
 .today-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .summary-points { margin: 6px 0 8px; padding-left: 20px; }
