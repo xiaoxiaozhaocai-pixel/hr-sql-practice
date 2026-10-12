@@ -68,9 +68,63 @@ test('miss_returns_explicit_local_knowledge_fallback', () => {
     assert.equal(res.ok, false, text);
     assert.equal(res.kind, 'fallback', text);
     assert.equal(res.title, QA.FALLBACK_TITLE, text);
-    assert.ok(res.lines.join(' ').includes('本地知识里没有这条'), text);
+    assert.ok(res.lines.length >= 1, text);
   }
 });
+
+test('miss_does_not_repeat_title_or_hint', () => {
+  // 未命中时不得同句重复：title 不出现在 lines 里，lines 与 hint 不互为子串。
+  const cases = [
+    ask('今天天气怎么样'),
+    ask('zzz_not_in_kb'),
+    QA.ask('zzz', { index: null })
+  ];
+  for (const res of cases) {
+    assert.equal(res.ok, false);
+    const body = res.lines.join(' ');
+    assert.ok(!body.includes(QA.FALLBACK_TITLE), 'title 不应出现在 lines 里: ' + body);
+    assert.ok(!body.includes(res.title), 'lines 不应重复 title');
+    assert.ok(!body.includes(res.hint), 'lines 不应包含 hint 全文');
+    assert.ok(!res.hint.includes(body), 'hint 不应包含 lines 全文');
+  }
+});
+
+test('bare_question_number_hits_question', () => {
+  const idx = QA.buildIndex({
+    questions: [{ seq: 12, id: 'q12', title: '分组统计', knowledge_point: 'GROUP BY', pitfalls: ['漏写列', '别名冲突'] }],
+    tables: [],
+    syntaxCards: []
+  });
+  for (const text of ['12', '#12', '第12题']) {
+    const res = QA.ask(text, { index: idx });
+    assert.equal(res.ok, true, text);
+    assert.equal(res.kind, 'question', text);
+    assert.match(res.title, /12/, text);
+    assert.ok(res.lines.join(' ').includes('考点') && res.lines.join(' ').includes('GROUP BY'), text);
+    assert.ok(res.lines.join(' ').includes('漏写列'), text);
+    assert.match(res.source, /q12/, text);
+  }
+});
+
+test('unknown_bare_question_number_falls_back_without_fabricating', () => {
+  const idx = QA.buildIndex({
+    questions: [{ seq: 12, id: 'q12', title: '分组统计' }],
+    tables: [],
+    syntaxCards: []
+  });
+  const res = QA.ask('999', { index: idx });
+  assert.equal(res.ok, false);
+  assert.equal(res.kind, 'fallback');
+  assert.equal(res.title, QA.FALLBACK_TITLE);
+  assert.ok(!res.lines.join(' ').includes(QA.FALLBACK_TITLE));
+});
+
+test('bare_question_number_is_safe_without_index', () => {
+  const res = QA.ask('12', { index: null });
+  assert.equal(res.ok, false);
+  assert.equal(res.kind, 'fallback');
+});
+
 
 test('sqlite_error_map_covers_at_least_five_kinds', () => {
   const cases = [

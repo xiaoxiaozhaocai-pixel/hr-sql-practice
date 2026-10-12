@@ -383,7 +383,7 @@
       ok: false,
       kind: 'fallback',
       title: FALLBACK_TITLE,
-      lines: lines && lines.length ? lines : [FALLBACK_TITLE + '。' + SCOPE_HINT],
+      lines: lines && lines.length ? lines : ['没匹配到你问的词。试试：表名 / 字段业务词 / 语法名，或当前题问「考点 / 易错点 / 要求」。'],
       source: null,
       hint: SCOPE_HINT
     };
@@ -501,6 +501,28 @@
     }
     if (looksLikeError(raw)) {
       return hit('error', 'SQLite 报错解释', [explainSqliteError(raw)], '本地报错映射表', null);
+    }
+
+    /* 0) 裸题号（12 / #12 / 第12题）：整条输入就是题号时直接定位该题 */
+    var qNum = /^\s*#?\s*(\d{1,3})\s*$/.exec(raw) || /^\s*第\s*(\d{1,3})\s*题\s*$/.exec(raw);
+    if (qNum) {
+      var n = Number(qNum[1]);
+      var qHit = null;
+      if (index) {
+        for (var qi = 0; qi < index.questions.length; qi++) {
+          var cand = index.questions[qi];
+          if (Number(cand.seq) === n || str(cand.id) === String(n)) { qHit = cand; break; }
+        }
+      }
+      if (qHit) {
+        var ps = Array.isArray(qHit.pitfalls) ? qHit.pitfalls.slice(0, 3) : [];
+        return hit('question', '第 ' + n + ' 题：' + str(qHit.title || qHit.id), [
+          '考点：' + str(qHit.knowledge_point || '—'),
+          '易错点：' + (ps.length ? ps.join('；') : '—'),
+          '想更具体可问：考点 / 易错点 / 要求（先在左侧切到该题）。'
+        ], '题 ' + questionId(qHit), null);
+      }
+      return miss();
     }
 
     /* 1) 当前题的意图词（有当前题才走） */
