@@ -18,6 +18,7 @@
   var BASELINE_DATE = BOOT.baselineDate || '2026-06-30';
   var L = window.HRLevels;
   var T = window.HRTables;
+  var QA = window.HRQa;
 
   /* 题 seq -> 真实用表：由 src/tables.js 从参考 SQL 解析（不再读 model-notes 的人工映射）。 */
   function tablesOf(q) {
@@ -862,6 +863,69 @@
     }
   }
 
+  /* ---------------------------- 问一问（本地离线问答面板，默认收起） ---------------------------- */
+  var qaIndex = null;
+
+  function qaEnsureIndex() {
+    if (qaIndex || !QA) return qaIndex;
+    qaIndex = QA.buildIndex({
+      tables: T ? T.allTables() : [],
+      questions: QUESTIONS,
+      syntaxCards: SYNTAX_BY_ID
+    });
+    return qaIndex;
+  }
+
+  function qaContextText() {
+    var q = currentQuestion();
+    return q ? ('当前题：#' + pad2(q.seq) + ' ' + (q.title || q.id)) : '未选题：只答表结构 / 字段 / 语法卡。';
+  }
+
+  function qaNode(res) {
+    var card = el('div', null, 'qa-answer ' + (res.ok ? 'is-hit' : 'is-miss'));
+    card.appendChild(el('div', res.title, 'qa-title'));
+    (res.lines || []).forEach(function (l) { card.appendChild(el('div', l, 'qa-line')); });
+    if (res.source) card.appendChild(el('div', '来源：' + res.source, 'qa-source'));
+    if (res.hint) card.appendChild(el('div', res.hint, 'qa-hint'));
+    return card;
+  }
+
+  function qaCompareNode(cmp) {
+    var card = el('div', null, 'qa-answer ' + (cmp.ok ? 'is-hit' : 'is-miss'));
+    card.appendChild(el('div', '与参考 SQL 的结构对比', 'qa-title'));
+    (cmp.observations || []).forEach(function (o) { card.appendChild(el('div', o, 'qa-line')); });
+    if (cmp.notes && cmp.notes.length) card.appendChild(el('div', cmp.notes.join(' '), 'qa-hint'));
+    card.appendChild(el('div', '来源：当前题参考答案 + 你的编辑器 SQL', 'qa-source'));
+    return card;
+  }
+
+  function qaRun(text) {
+    var input = $('qa-input');
+    var box = $('qa-results');
+    if (!box) return;
+    if (text !== undefined && input) input.value = text;
+    var asked = input ? input.value : '';
+    box.textContent = '';
+    if (!QA) { box.appendChild(el('div', '问一问模块未加载。', 'qa-line')); return; }
+    var cur = currentQuestion();
+    if (String(asked).indexOf('对比') !== -1) {
+      var ref = cur ? (cur.reference_sql_sqlite || cur.reference_sql || '') : '';
+      var userSql = $('sql-input') ? $('sql-input').value : '';
+      box.appendChild(qaCompareNode(QA.compareToReference(userSql, ref)));
+      return;
+    }
+    box.appendChild(qaNode(QA.ask(asked, { index: qaEnsureIndex(), question: cur })));
+  }
+
+  function qaSetOpen(on) {
+    var body = $('qa-body'), toggle = $('qa-toggle'), caret = $('qa-caret');
+    if (!body || !toggle) return;
+    body.hidden = !on;
+    toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (caret) caret.classList.toggle('open', on);
+    if (on) { var input = $('qa-input'); if (input) input.focus(); }
+  }
+
   function renderDictHints(q) {
     var host = $('q-dict-hints');
     if (!host) return;
@@ -978,6 +1042,11 @@
     var q = currentQuestion();
     show($('detail-empty'), !q);
     show($('detail-body'), !!q);
+    /* 问一问：换题时刷新上下文、清掉上一题的回答，避免串味。 */
+    var qaCtx = $('qa-context');
+    if (qaCtx) qaCtx.textContent = qaContextText();
+    var qaBox = $('qa-results');
+    if (qaBox) qaBox.textContent = '';
     if (!q) return;
 
     $('q-title').textContent = '#' + pad2(q.seq) + ' ' + (q.title || q.id);
@@ -1712,6 +1781,35 @@
       renderDetail();
       showBanner('selfcheck-banner', '');
     });
+
+    /* 问一问：折叠头可点击 / 键盘可达；输入回车即问；快捷 chips 填词再问。 */
+    var qaToggle = $('qa-toggle');
+    var qaBody = $('qa-body');
+    if (qaToggle && qaBody) {
+      qaToggle.addEventListener('click', function () { qaSetOpen(qaBody.hidden); });
+      qaToggle.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          qaSetOpen(qaBody.hidden);
+        }
+      });
+      qaSetOpen(false);
+    }
+    var qaAsk = $('qa-ask');
+    if (qaAsk) qaAsk.addEventListener('click', function () { qaRun(); });
+    var qaInput = $('qa-input');
+    if (qaInput) {
+      qaInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); qaRun(); }
+      });
+    }
+    var qaChips = $('qa-chips');
+    if (qaChips) {
+      qaChips.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('.qa-chip') : null;
+        if (b && b.getAttribute('data-qa')) qaRun(b.getAttribute('data-qa'));
+      });
+    }
   }
 
   function onSqlEdit() {

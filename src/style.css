@@ -384,6 +384,39 @@ pre {
 .section-summary, .today-wrap { margin-top: 12px; }
 .summary-points { margin: 6px 0 8px; padding-left: 20px; }
 
+/* ---------------------------- 问一问（本地问答面板，默认收起） ---------------------------- */
+.qa-panel { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.qa-panel .qa-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  font-size: 14px; background: var(--panel); cursor: pointer;
+}
+.qa-panel .qa-cap { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+.qa-panel .qa-body { border-top: 1px solid var(--line); padding: 8px 16px; }
+.qa-panel .qa-note { font-size: 12px; color: var(--ink-3); margin: 8px 0; }
+.qa-panel .qa-row { display: flex; gap: 8px; margin: 8px 0; }
+.qa-panel .qa-row input {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 14px; padding: 8px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); color: var(--ink);
+}
+.qa-panel .qa-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.qa-panel .qa-chip {
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
+  border-radius: 4px; padding: 4px 8px; font-size: 12px;
+}
+.qa-panel .qa-chip:hover { background: var(--accent-soft); color: var(--accent); }
+.qa-panel .qa-context { font-size: 12px; color: var(--ink-3); margin: 8px 0; }
+.qa-panel .qa-results { display: flex; flex-direction: column; gap: 8px; }
+.qa-panel .qa-answer {
+  border-left: 3px solid var(--line); background: var(--neutral-tint);
+  border-radius: 4px; padding: 8px 12px; font-size: 13px; line-height: 1.6;
+}
+.qa-panel .qa-answer.is-hit { border-left-color: var(--ok); }
+.qa-panel .qa-answer.is-miss { border-left-color: var(--warn); }
+.qa-panel .qa-title { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.qa-panel .qa-line { color: var(--ink); overflow-wrap: anywhere; }
+.qa-panel .qa-source { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+.qa-panel .qa-hint { color: var(--ink-2); font-size: 12px; margin-top: 4px; }
+
 /* ---------------------------- 窄屏：左栏收起，主列优先保宽 ---------------------------- */
 @media (max-width: 968px) {
   .layout { display: block; padding: 8px; }

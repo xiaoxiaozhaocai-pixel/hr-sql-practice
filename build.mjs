@@ -78,6 +78,7 @@ function main() {
   html = inject(html, '/*__HR_LEVELS__*/', escapeScriptClose(readText('src/levels.js')));
   html = inject(html, '/*__HR_TABLES__*/', escapeScriptClose(readText('src/tables.js')));
   html = inject(html, '/*__HR_DB__*/', escapeScriptClose(readText('src/db.js')));
+  html = inject(html, '/*__HR_QA__*/', escapeScriptClose(readText('src/qa.js')));
   html = inject(html, '/*__HR_APP__*/', escapeScriptClose(readText('src/app.js')));
 
   /* ---- 自检：产物不得有任何外部请求 ---- */

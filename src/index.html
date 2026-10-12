@@ -129,6 +129,29 @@
 
         <div id="q-syntax" class="q-syntax" hidden=""></div>
 
+        <div id="qa-panel" class="qa-panel">
+          <div class="qa-head" id="qa-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="qa-body">
+            <span>问一问</span>
+            <span class="qa-cap">本地离线 · 不联网</span>
+            <span class="caret" id="qa-caret"></span>
+          </div>
+          <div class="qa-body" id="qa-body" hidden="">
+            <p class="qa-note">只答站内表结构 / 当前题 / 语法卡；答不上就明说，不编造。</p>
+            <div class="qa-row">
+              <input id="qa-input" type="text" placeholder="如：实发、在职、NetPay、GROUP BY、考点、易错点" autocomplete="off"/>
+              <button id="qa-ask" type="button" class="btn primary sm">提问</button>
+            </div>
+            <div class="qa-chips" id="qa-chips">
+              <button type="button" class="qa-chip" data-qa="考点">考点</button>
+              <button type="button" class="qa-chip" data-qa="易错点">易错点</button>
+              <button type="button" class="qa-chip" data-qa="涉及哪些表">涉及哪些表</button>
+              <button type="button" class="qa-chip" data-qa="对比我的 SQL">对比我的 SQL</button>
+            </div>
+            <div class="qa-context muted" id="qa-context"></div>
+            <div id="qa-results" class="qa-results" role="status" aria-live="polite" aria-atomic="false"></div>
+          </div>
+        </div>
+
         <div class="hint-box">
           <div class="hint-head">
             <span>渐进提示</span>
@@ -260,6 +283,9 @@ window.HR_BOOT = /*__HR_BOOTSTRAP__*/;
 </script>
 <script>
 /*__HR_DB__*/
+</script>
+<script>
+/*__HR_QA__*/
 </script>
 <script>
 /*__HR_APP__*/
