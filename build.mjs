@@ -81,7 +81,18 @@ function main() {
   html = inject(html, '/*__HR_QA__*/', escapeScriptClose(readText('src/qa.js')));
   html = inject(html, '/*__HR_APP__*/', escapeScriptClose(readText('src/app.js')));
 
-  /* ---- 自检：产物不得有任何外部请求 ---- */
+  /* ---- 自检：产物不得有任何外部请求 ----
+   * 例外只有一类：页面里的普通外链标签 <a href="http(s)://…">。
+   * 先把这类标签整段摘出、计数并打印目标地址，再拿「摘掉之后剩下的 HTML」跑下面 7 条检查；
+   * 非 a[href] 的 http(s):// 一律仍然拦死。产物零资源请求（script/link/img/url()/@import 无外链）。 */
+  const externalAnchorRe = /<a\s[^>]*href=["']https?:\/\/[^"']+["'][^>]*>/gi;
+  const allowedAnchors = [];
+  const htmlWithoutAnchors = html.replace(externalAnchorRe, (tag) => {
+    const m = tag.match(/href=["'](https?:\/\/[^"']+)["']/i);
+    allowedAnchors.push(m ? m[1] : tag);
+    return '';
+  });
+
   const checks = [
     ['http://', /http:\/\//i],
     ['https://', /https:\/\//i],
@@ -93,9 +104,9 @@ function main() {
   ];
   const hits = [];
   for (const [name, re] of checks) {
-    const m = html.match(re);
+    const m = htmlWithoutAnchors.match(re);
     if (m) {
-      hits.push(`${name} -> ${JSON.stringify(html.slice(Math.max(0, m.index - 40), m.index + 60))}`);
+      hits.push(`${name} -> ${JSON.stringify(htmlWithoutAnchors.slice(Math.max(0, m.index - 40), m.index + 60))}`);
     }
   }
   if (hits.length) {
@@ -109,7 +120,9 @@ function main() {
   fs.writeFileSync(OUT_FILE, html, 'utf8');
 
   const bytes = fs.statSync(OUT_FILE).size;
-  console.log('[build] external-reference self-check: PASS (0 hits)');
+  console.log('[build] external-reference self-check: PASS (0 resource hits)');
+  console.log('[build] external a[href] allowed:', allowedAnchors.length,
+    allowedAnchors.map((u) => `-> ${u}`).join(' '));
   console.log('[build] questions inlined:', pack.questions.length, '| wasm base64 chars:', wasmBase64.length);
   console.log('[build] wrote', path.relative(ROOT, OUT_FILE).replace(/\\/g, '/'), '=', bytes, 'bytes');
 }

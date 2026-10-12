@@ -1,4 +1,40 @@
-# DB Quest v2 · HR 语境 SQL 闯关（单文件 HTML）
+# DB Quest v2 · HR 语境 SQL 闯关（离线单文件）
+
+> **一句话**：一个离线单文件的 HR 语境 SQL 闯关页 —— **120 题 · 6 段**，SQL Server（T-SQL）权威写法与 SQLite 网页实跑写法**双方言对照**。
+
+**在线体验**：<https://hr-sql.page.coze.site> ｜ **源码**：<https://github.com/xiaoxiaozhaocai-pixel/hr-sql-practice>（MIT） ｜ **语言**：[English](README.en.md)
+
+![首页全景：左栏六段关卡列表，中间题干与 SQL 编辑器，右栏运行结果表](docs/images/overview-1280.png)
+
+*图注 · 首页全景（桌面）：左栏六段主线，中间题干 / SQL 编辑器 / 结果表，首屏常驻「方言对照」条。*
+
+**关键事实**
+
+| 事实 | 说明 |
+| --- | --- |
+| **120 题 · 6 段** | 按 `section` 自动分 6 段，段内按 `seq` 递进 |
+| **T-SQL 与 SQLite 双方言对照** | SQL Server（T-SQL）权威写法 + SQLite 网页实跑写法，每题两种写法都给 |
+| **单文件离线 · 零依赖零后端** | 约 1.9 MB 单个 HTML，双击即用、`file://` 可跑 |
+| **MIT** | 开源许可；内联的 sql.js 1.14.2 同为 MIT |
+
+全部数据为**虚构示例**，与任何真实单位、组织、系统、个人**零关联**。
+
+## 快速上手
+
+1. **在线玩**：打开 <https://hr-sql.page.coze.site>（无需注册、无需安装）。
+2. **离线玩**：取单文件 [`dist/hr-sql-practice.html`](dist/hr-sql-practice.html)，双击打开即可（Chrome / Edge / Firefox 任一新版浏览器）。
+3. **卡住了**：页面里随时打开「问一问」本地问答面板（零联网，数据不出本机）。
+
+## 界面速览
+
+| 手机竖屏 | 「问一问」面板 |
+| --- | --- |
+| ![手机竖屏：左栏折叠为顶部抽屉，题干与编辑器占满宽度](docs/images/overview-375.png) | ![「问一问」本地问答面板展开态](docs/images/qa-panel-1280.png) |
+| *图注 · 手机竖屏（375px）：左栏折叠为顶部抽屉。* | *图注 · 「问一问」面板：本地问答，零联网。* |
+
+---
+
+## 工程细节（开发者）
 
 一个**完全离线、零后端、零依赖**的多邻国式 SQL 闯关页：把权威数据库结构、种子数据、120 道 HR 业务题、
 判题引擎与游戏化闯关壳全部打成一个 HTML 文件，双击即可闯关。产物 `dist/hr-sql-practice.html`
@@ -184,8 +220,10 @@ dist/hr-sql-practice.html  构建产物（单文件，双击可跑）
 2. 读 `data/schema_sqlite.sql`、`data/seed_sqlite.sql`、`data/questions.json`、`data/rowcount_expected.json`。
 3. 读 `src/style.css`、`src/judge.js`、`src/levels.js`、`src/db.js`、`src/app.js`。
 4. 全部按字面量塞进 `src/index.html` 的占位符，写出 `dist/hr-sql-practice.html`，并报出成品字节数。
-5. **自检**：扫产物里的 `http://`、`https://`、`<script src=`、`<link href=`、`<img src=`、CSS `@import`、
-   `url(//` 外链。命中则**非零退出且不写产物**；通过则打印 `external-reference self-check: PASS (0 hits)`。
+5. **自检**：先把页面里的普通外链标签 `<a href="https://…">` 摘出并计数（只放行这一类，构建日志打印条数与目标地址），
+   再把剩下的 HTML 交给 7 条外链检查：`http://`、`https://`、`<script src=`、`<link href=`、`<img src=`、CSS `@import`、
+   `url(//`。命中则**非零退出且不写产物**；通过则打印 `external-reference self-check: PASS (… hits)`。
+   非 `a[href]` 的 `http(s)://` 一律仍然拦死，产物**零资源请求**（script / link / img / url() / @import 一个外链都不许有）。
 
 内联的两个易错点，写在 `build.mjs` 注释里：占位符替换用 `split/join`（避免 `$&` 被当替换模式）；内联脚本里的
 `</script` 一律改写成 `<\/script`（否则 script 标签被提前闭合）。

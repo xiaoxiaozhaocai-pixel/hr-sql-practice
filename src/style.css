@@ -327,6 +327,8 @@ pre {
 }
 
 .foot { margin-top: 16px; padding: 24px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.foot-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.foot-link:hover { color: var(--ink-2); }
 
 /* ---------------------------- 学习记录（顶栏指标收进这里） ---------------------------- */
 .record-panel {
