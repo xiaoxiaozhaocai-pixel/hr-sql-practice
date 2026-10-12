@@ -38,7 +38,7 @@ whatsoever to any real organization, system or person**.
 
 | Desktop overview | Mobile portrait |
 | --- | --- |
-| ![Desktop overview: six-section level list on the left, question and SQL editor in the middle, result table on the right](docs/images/overview-1280.png) | ![Mobile portrait: the level list collapses into a top drawer](docs/images/overview-375.png) |
+| ![Desktop overview: six-section level list on the left, question stem and syntax card in the middle, SQL editor and the local "Ask" panel below](docs/images/overview-1280.png) | ![Mobile portrait (375px): header and stat bar wrap, tag chips wrap onto several lines, no horizontal overflow](docs/images/overview-375.png) |
 
 ![The local "Ask" panel expanded](docs/images/qa-panel-1280.png)
 

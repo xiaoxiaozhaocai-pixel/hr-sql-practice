@@ -81,6 +81,9 @@ test('readme_images_are_relative_paths_only', () => {
   for (const name of ['docs/images/overview-1280.png', 'docs/images/overview-375.png', 'docs/images/qa-panel-1280.png']) {
     assert.ok(imgs.includes(name), `README 应引用 ${name}`);
   }
+  for (const src of imgs) {
+    assert.ok(fs.existsSync(path.join(ROOT, src)), `README 引用的图片必须真实存在于仓库：${src}`);
+  }
   const html = readmeZh;
   assert.ok(!/shields\.io/i.test(html), '禁止 shields.io 徽章');
   assert.ok(!/img\.shields/i.test(html), '禁止 shields 图床');
