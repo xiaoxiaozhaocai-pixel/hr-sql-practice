@@ -84,9 +84,7 @@ button { font: inherit; cursor: pointer; }
 .bar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left center; transform: scaleX(0); transition: transform 220ms cubic-bezier(.2,0,0,1); }
 .stat { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.stat-hearts { color: var(--accent); letter-spacing: 1px; }
 .stat-goal.is-met { color: var(--ok); font-weight: 600; }
-.level-hearts { font-size: 12px; color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
 
 /* ---------------------------- 横幅（与提示/警告/错误共用同一套卡片样式） ---------------------------- */
 .banner {
@@ -415,6 +413,7 @@ pre {
 .today-list li.is-review .t-status { color: var(--accent); }
 .next-action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .section-summary, .today-wrap { margin-top: 12px; }
+.today-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .summary-points { margin: 6px 0 8px; padding-left: 20px; }
 
 /* ---------------------------- 问一问（本地问答面板，默认收起） ---------------------------- */
@@ -639,10 +638,19 @@ pre {
           <button id="btn-run" type="button" class="btn primary">运行</button>
           <button id="btn-judge" type="button" class="btn dark">判题</button>
           <button id="btn-answer" type="button" class="btn ghost">查看答案</button>
+          <button id="btn-wrap" type="button" class="btn ghost">今天先到这里</button>
           <span class="hint" id="run-hint"></span>
         </div>
 
         <div id="verdict" class="card-note" role="region" aria-label="判题结论" hidden=""></div>
+
+        <section class="card section-summary" id="section-summary" hidden="" role="region" aria-label="段末总结">
+          <h3 id="section-summary-title"></h3>
+          <p id="section-summary-body"></p>
+          <h4>本段主要考点</h4>
+          <ul id="section-summary-points" class="summary-points"></ul>
+          <div id="section-summary-due" class="muted"></div>
+        </section>
 
         <div id="next-action" class="next-action" hidden="">
           <button id="btn-next-primary" type="button" class="btn primary"></button>
@@ -652,11 +660,11 @@ pre {
 
       <section class="card" id="result-block" hidden="">
         <div class="tabs" role="tablist" aria-label="结果视图">
-          <button id="tab-mine" type="button" class="on" role="tab" aria-selected="true" aria-controls="result-table">我的结果</button>
-          <button id="tab-ref" type="button" role="tab" aria-selected="false" aria-controls="result-table">预期结果</button>
+          <button id="tab-mine" type="button" class="on" role="tab" aria-selected="true" aria-controls="result-panel" tabindex="0">我的结果</button>
+          <button id="tab-ref" type="button" role="tab" aria-selected="false" aria-controls="result-panel" tabindex="-1">预期结果</button>
         </div>
         <div id="result-note" class="muted result-note"></div>
-        <div class="tablewrap"><table id="result-table"></table></div>
+        <div class="tablewrap" id="result-panel" role="tabpanel" aria-labelledby="tab-mine"><table id="result-table"></table></div>
       </section>
 
       <section class="card" id="answer-block" hidden="">
@@ -677,17 +685,13 @@ pre {
         <p id="q-dialect"></p>
       </section>
 
-      <section class="card section-summary" id="section-summary" hidden="" aria-label="段末总结">
-        <h3 id="section-summary-title"></h3>
-        <p id="section-summary-body"></p>
-        <h4>本段主要考点</h4>
-        <ul id="section-summary-points" class="summary-points"></ul>
-        <div id="section-summary-due" class="muted"></div>
-      </section>
-
       <section class="card today-wrap" id="today-wrap" hidden="" aria-label="今日收束">
         <h3 id="today-wrap-title"></h3>
         <p id="today-wrap-body"></p>
+        <div class="today-actions">
+          <button id="btn-wrap-back" type="button" class="btn primary sm">返回练习</button>
+          <button id="btn-retry-save" type="button" class="btn ghost sm" hidden="">重试保存</button>
+        </div>
       </section>
     </div>
   </section>
@@ -696,20 +700,20 @@ pre {
 <div id="scrim" class="scrim" hidden=""></div>
 <aside id="drawer" class="drawer" hidden="" aria-hidden="true">
   <div class="dh">
-    <div class="drawer-tabs" role="tablist">
-      <button id="tab-tables" type="button" class="dtab on" role="tab" aria-selected="true">表结构</button>
-      <button id="tab-dialect" type="button" class="dtab" role="tab" aria-selected="false">方言对照</button>
+    <div class="drawer-tabs" role="tablist" aria-label="表结构 / 方言对照">
+      <button id="tab-tables" type="button" class="dtab on" role="tab" aria-selected="true" aria-controls="panel-tables" tabindex="0">表结构</button>
+      <button id="tab-dialect" type="button" class="dtab" role="tab" aria-selected="false" aria-controls="panel-dialect" tabindex="-1">方言对照</button>
     </div>
     <span class="esc">Esc 关闭</span>
     <button id="drawer-close" type="button" class="icon-btn" title="关闭">关闭</button>
   </div>
   <div class="dbody">
-    <div id="panel-tables" class="tables-panel">
+    <div id="panel-tables" class="tables-panel" role="tabpanel" aria-labelledby="tab-tables">
       <ul class="panel-meta"><li>11 张表 + 3 个视图</li><li>只列结构，不含数据行</li><li>行数为全表行数，不是你本题的答案行数</li></ul>
       <input id="tables-search" type="search" class="tables-search" placeholder="搜索表名 / 字段名，如 HR_EMPLOYEE、NetPay" autocomplete="off"/>
       <div id="tables-list" class="tables-list"></div>
     </div>
-    <div id="panel-dialect" class="tables-panel" hidden="">
+    <div id="panel-dialect" class="tables-panel" hidden="" role="tabpanel" aria-labelledby="tab-dialect">
       <dl class="dict">
         <dt>网页引擎</dt><dd>SQLite（权威源 = SQL Server）</dd>
         <dt>TOP n</dt><dd>→ LIMIT n</dd>
@@ -730,7 +734,7 @@ pre {
 <footer class="foot">
   题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，关卡编排在 <code>src/levels.js</code>，
   渲染 / 判题 / 存储各自独立。全部数据为虚构示例，与任何真实单位、系统、个人无关。
-  进度只存在本机浏览器 <code>localStorage</code>（键 <code>dbquest.v2</code>），刷新不丢。
+  <span id="foot-persist">进度只存在本机浏览器 <code>localStorage</code>（键 <code>dbquest.v2</code>），刷新不丢。</span>
   <a class="foot-link" href="https://github.com/xiaoxiaozhaocai-pixel/hr-sql-practice" target="_blank" rel="noopener">GitHub · 源码与许可</a>
 </footer>
 
@@ -3579,10 +3583,14 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   var lastCombined = null;       // 段末 + 今日目标合并结算只弹一次
 
   var openPanel = null;       // 'drawer' | 'rail' | null
+  var panelReturnFocus = null;  // 打开浮层前的焦点来源，关闭时归还（C）
   var lastRun = null;         // { columns, rows }：最近一次「运行」的结果，供结果区 tab 切换
+  var lastSel = null;         // 编辑器最近一次选区，供「返回练习」恢复（L）
   var filter = { kw: '', diffs: {}, undoneOnly: false };
   var suggestItems = [];      // 当前补全候选（键盘 ↑/↓ 用）
   var suggestIndex = -1;      // -1 = 未选中，Enter 保持换行语义
+  var editorStatusTimer = null; // 连续输入停止 400ms 后合并显示一次保存反馈（D/I）
+  var editorStatusSave = '';    // 已确认的保存反馈文案
 
   /* GF1-D/E/F：受理快照与事件标识。每次运行/判题固定「题号 + SQL 快照 + 递增事件号」；
      提交后再编辑、切题或开始新一轮都会让旧快照失效，旧装饰回调不再落到新状态上。 */
@@ -3622,21 +3630,63 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     node.addEventListener('animationend', onEnd);
   }
 
-  function saveProgress() { if (state) L.saveState(storage, state); }
+  function saveProgress() { return state ? L.saveState(storage, state) : false; }
 
-  /* GF1-D：编辑器标题旁的静态状态文字（保存 / 已运行 / 已修改）。 */
-  function updateEditorStatus() {
+  /* GF1-D/B：编辑器标题旁的静态状态文字（保存 / 已运行 / 已修改 / 进入题目的恢复状态）。 */
+  function editorStatusBase() {
+    if (accepted && accepted.qid === currentId) {
+      return accepted.stale ? '已修改，需重新运行或判题'
+        : (accepted.kind === 'run' ? '已运行，尚未判题' : '已判题');
+    }
+    var q = currentQuestion();
+    if (!q) return '';
+    if (state.passed[q.id]) return '本题已完成，可改写练习';
+    if (state.sql[q.id]) return '已恢复本题草稿，继续编辑';
+    return '本题尚未判题';
+  }
+
+  /* 保存反馈只在「确实写入」或「确实降级为仅内存」时才说，不用同一句兜底两种状态。 */
+  function saveFeedbackText() {
+    if (!state || !currentId) return '';
+    var sql = state.sql[currentId];
+    if (sql === undefined || sql === null || sql === '') return '';
+    if (!STORAGE_OK || (state.learning && state.learning.persistence === 'memoryOnly')) {
+      return '草稿仅暂存在本页，关闭可能丢失';
+    }
+    return '草稿已保存到此浏览器';
+  }
+
+  function paintEditorStatus() {
     var node = $('editor-status');
     if (!node) return;
-    var text = '';
-    if (accepted && accepted.qid === currentId) {
-      text = accepted.stale ? '已修改，需重新运行或判题'
-        : (accepted.kind === 'run' ? '已运行，尚未判题' : '已判题');
-    } else {
-      var q = currentQuestion();
-      if (q && state && state.sql[q.id]) text = '已恢复本题草稿';
-    }
+    var text = editorStatusBase();
+    if (editorStatusSave) text = text ? text + ' · ' + editorStatusSave : editorStatusSave;
     node.textContent = text;
+  }
+
+  /* 立即写：用于运行 / 判题结束、换题与回看——清掉待播的保存反馈，避免残留过期文案。 */
+  function updateEditorStatus() {
+    if (editorStatusTimer) { clearTimeout(editorStatusTimer); editorStatusTimer = null; }
+    editorStatusSave = saveFeedbackText();
+    paintEditorStatus();
+  }
+
+  /* D：连续输入停止 400ms 后合并显示一次保存反馈；保存本身仍按每次编辑执行。 */
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) { return false; }
+  }
+
+  function scheduleSaveStatus() {
+    if (editorStatusTimer) clearTimeout(editorStatusTimer);
+    /* 减弱动画下延迟一并归零；判题 / 运行结束时仍由 updateEditorStatus 立即写正确文案。 */
+    var delay = prefersReducedMotion() ? 0 : 400;
+    editorStatusTimer = setTimeout(function () {
+      editorStatusTimer = null;
+      editorStatusSave = saveFeedbackText();
+      paintEditorStatus();
+    }, delay);
   }
 
   /* GF1-D/E：旧运行结果 / 旧判定一旦被后续编辑或新一轮运行取代，就地标为过期；
@@ -4018,6 +4068,14 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     return L.goalMet(state) ? '今天目标已完成' : '今天到这里';
   }
 
+  /* L：保存成功与仅内存暂存分开表达，不用同一句兜底。 */
+  function saveSentence() {
+    if (!STORAGE_OK || (state.learning && state.learning.persistence === 'memoryOnly')) {
+      return '进度仅保留在本页，关闭或刷新可能丢失。';
+    }
+    return '草稿和进度已保存到此浏览器。';
+  }
+
   function todayWrapText() {
     var d = state.learning.daily;
     var today = d.day;
@@ -4027,19 +4085,41 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (c && c.firstPassDay === today) fresh += 1;
       else review += 1;
     });
-    var sp = L.sectionProgress(state, SECTIONS);
-    var needs = sp.sections.reduce(function (n, s) { return n + s.needsFix; }, 0);
-    return '今天完成 ' + fresh + ' 道新题、复查 ' + review +
-      ' 题；待修正 ' + needs + ' 题。下次主动作：' + (nextPlanItem() ? '继续今天这一组的下一项' : '从待复查或下一段继续') + '。' +
-      '错过一天不退段，下次从上次的位置继续即可。';
+    var nextId = nextPlanItem();
+    var nq = nextId ? QUESTION_BY_ID[nextId] : null;
+    var nextText = nq ? ('下次从 #' + pad2(nq.seq) + ' 继续。') : '当前没有待推进的题，可自由回看或换题。';
+    return '今天到这里：新完成 ' + fresh + ' 题，复查 ' + review + ' 题。' + nextText + saveSentence();
+  }
+
+  /* 页面底部与学习记录的保存承诺随真实写入状态调整。 */
+  function updatePersistNotes() {
+    var memOnly = !STORAGE_OK || !!(state.learning && state.learning.persistence === 'memoryOnly');
+    var foot = $('foot-persist');
+    if (foot) {
+      foot.textContent = memOnly
+        ? '本次进度仅保留在本页，关闭或刷新可能丢失（可重试保存）。'
+        : '进度只存在本机浏览器 localStorage（键 dbquest.v2），刷新不丢。';
+    }
+    var retry = $('btn-retry-save');
+    if (retry && !$('today-wrap').hidden) show(retry, memOnly);
+    return memOnly;
   }
 
   function showTodayWrap(celebrate) {
     var box = $('today-wrap');
     if (!box) return;
+    /* L：先保存，再显示静态摘要；不清草稿、不清通过记录、不自动关窗。 */
+    saveProgress();
     $('today-wrap-title').textContent = todayWrapTitle();
     $('today-wrap-body').textContent = todayWrapText();
     show(box, true);
+    updatePersistNotes();
+    /* L：小结聚焦标题；「返回练习」按钮留在原地。 */
+    var title = $('today-wrap-title');
+    if (title) {
+      title.setAttribute('tabindex', '-1');
+      try { title.focus({ preventScroll: true }); } catch (e) { try { title.focus(); } catch (e2) { /* 保持原焦点 */ } }
+    }
     if (celebrate) announce('今日目标已完成。');
   }
 
@@ -4109,6 +4189,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (memoryOnly) { persist.textContent = '本次进度尚未保存到浏览器（刷新可能丢失）；可重试保存，已有完成记录不变。'; show(persist, true); }
       else { persist.textContent = ''; show(persist, false); }
     }
+    updatePersistNotes();
     renderTodayGroup();
   }
 
@@ -4152,7 +4233,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
         li.setAttribute('role', 'button');
         li.setAttribute('tabindex', '0');
         li.setAttribute('data-qid', q.id);
-        li.setAttribute('aria-label', '第 ' + sec.section + ' 段第 ' + sectionIndexOf(sec, q) + ' 题：' + (q.title || q.id));
+        li.setAttribute('aria-label', '第 ' + sec.section + ' 段第 ' + sectionIndexOf(sec, q.id) + ' 题：' + (q.title || q.id));
         var row = el('div', null, 'q-row');
         row.appendChild(el('span', pad2(q.seq), 'no'));
         row.appendChild(el('span', q.title || q.id, 'qt'));
@@ -4169,7 +4250,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
         else if (rv && rv.status === 'needsFix') meta.appendChild(el('span', '待修正', 'chip warn'));
         /* 搜索结果标段号 + 段内位置，避免 q005→q064 像难度跳变。 */
         if (String(filter.kw || '').trim()) {
-          meta.appendChild(el('span', '本段第 ' + sectionIndexOf(sec, q) + ' 题', 'chip'));
+          meta.appendChild(el('span', '本段第 ' + sectionIndexOf(sec, q.id) + ' 题', 'chip'));
         }
         li.appendChild(meta);
 
@@ -4193,6 +4274,16 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }
   }
 
+  /* B：进入题目时读屏只需题号 / 段内位置与恢复状态，不朗读整题。 */
+  function enterAnnouncement(q) {
+    if (!q) return '';
+    var sec = SECTION_OF[q.id];
+    var pos = sec ? ('第 ' + sec.section + ' 段第 ' + sectionIndexOf(sec, q.id) + ' 题') : '';
+    var st = state.passed[q.id] ? '本题已完成，可改写练习'
+      : (state.sql[q.id] ? '已恢复本题草稿，继续编辑' : '本题尚未判题');
+    return pos ? (pos + '。' + st) : st;
+  }
+
   function selectLevel(id, fromKeyboard) {
     if (!QUESTION_BY_ID[id]) return;
     currentId = id;
@@ -4206,11 +4297,13 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     renderStats();
     renderDetail();
     if (openPanel === 'rail') closePanel();
-    /* 切题后焦点回到合理位置：键盘激活时把焦点放到新题标题，再由用户自主进入编辑器。 */
-    if (fromKeyboard) {
-      var title = $('q-title');
-      if (title) { title.setAttribute('tabindex', '-1'); try { title.focus(); } catch (e) { /* 标题不可聚焦时保持原焦点 */ } }
+    /* B/K：点击或键盘选题都先把焦点交到新题标题（程序可聚焦），再由用户自主进入编辑器。 */
+    var title = $('q-title');
+    if (title) {
+      title.setAttribute('tabindex', '-1');
+      try { title.focus({ preventScroll: true }); } catch (e) { try { title.focus(); } catch (e2) { /* 标题不可聚焦时保持原焦点 */ } }
     }
+    announce(enterAnnouncement(currentQuestion()));
   }
 
   /* ------------------------------ 渐进提示（一个动作 + 一个计数） ------------------------------ */
@@ -4240,12 +4333,12 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var n = Math.min(hintSeen(q) + 1, list.length);
     state.hintSeen[q.id] = n;
     saveProgress();
-    renderHints(q);
+    renderHints(q, true);
     if (n > 0 && list[n - 1]) announce('已展开提示 ' + n + '/' + list.length + '：' + list[n - 1]);
     else if (!list.length) announce('本题未提供提示。');
   }
 
-  function renderHints(q) {
+  function renderHints(q, animate) {
     var list = hintTexts(q);
     var seen = hintSeen(q);
     state.hintSeen[q.id] = seen;
@@ -4253,6 +4346,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     ul.textContent = '';
     for (var i = 0; i < seen; i++) ul.appendChild(el('li', list[i]));
     show($('hint-empty'), seen === 0 && list.length > 0);
+    /* C：只有新展开的那一条用 A（hr-fade-up），回看 / 重绘不重播。 */
+    if (animate && ul.lastChild) replayAnim(ul.lastChild, 'hr-anim-fade-up');
 
     var btn = $('btn-hint');
     if (!btn) return;
@@ -4451,6 +4546,10 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
         saveProgress();
         var fresh = syntaxCardNode(c, i, qid);
         if (card.parentNode) card.parentNode.replaceChild(fresh, card);
+        /* C：确认后焦点去替换后的回看按钮，键盘路径不断档。 */
+        var back = fresh.querySelector('.syntax-review-toggle');
+        if (back) { try { back.focus(); } catch (e) { /* 保持原焦点 */ } }
+        refreshSyntaxStart(QUESTION_BY_ID[qid]);
         announce('已记录看过语法：' + c.syntax);
       });
       actions.appendChild(btn);
@@ -4458,6 +4557,28 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }
     card.appendChild(actions);
     return card;
+  }
+
+  /* C：最后一张未读语法卡确认后才呈现「开始写 SQL」入口；不要求确认所有卡才能作答。 */
+  function refreshSyntaxStart(q) {
+    var host = $('q-syntax');
+    if (!host) return;
+    var existing = host.querySelector('.syntax-start-entry');
+    var cards = (q && SYNTAX_BY_ID[q.id]) || null;
+    var allSeen = !!(cards && cards.length) && cards.every(function (c) {
+      return !!(L && typeof L.isSyntaxSeen === 'function' && L.isSyntaxSeen(state, c.syntax));
+    });
+    if (!allSeen) { if (existing && existing.parentNode) existing.parentNode.removeChild(existing); return; }
+    if (existing) return;
+    var actions = el('div', null, 'syntax-actions syntax-start-entry');
+    var go = el('button', '开始写 SQL', 'btn primary sm');
+    go.type = 'button';
+    go.addEventListener('click', function () {
+      var ta = $('sql-input');
+      if (ta) { ta.focus(); try { ta.scrollIntoView({ block: 'nearest' }); } catch (e) { /* 只聚焦 */ } }
+    });
+    actions.appendChild(go);
+    host.appendChild(actions);
   }
 
   /* syntax_intro 首现卡片：SYNTAX_BY_ID 已按 section→seq 扫好，只渲染首现项；
@@ -4473,6 +4594,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       host.appendChild(syntaxCardNode(c, i, q.id));
     });
     host.hidden = false;
+    refreshSyntaxStart(q);
   }
 
   /* 回看入口点「语法卡」时展开已收起的卡（不改阅读状态、不动首次教学卡按钮状态）。 */
@@ -4629,38 +4751,90 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   }
 
   /* ------------------------------ 抽屉 / 左栏浮层 ------------------------------ */
+  /* E/C：tablist 方向键 ←/→ 在标签间移动并切换，roving tabindex 与 aria-selected 同步。 */
+  function wireTablist(tabs, onSelect) {
+    tabs.forEach(function (t, i) {
+      if (!t) return;
+      t.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : (e.key === 'ArrowLeft' ? -1 : 0);
+        if (!d) return;
+        e.preventDefault();
+        var next = tabs[(i + d + tabs.length) % tabs.length];
+        onSelect(next);
+        try { next.focus(); } catch (e2) { /* 无法聚焦时仍完成切换 */ }
+      });
+    });
+  }
+
+  function focusablesIn(node) {
+    if (!node) return [];
+    var all = node.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    return [].filter.call(all, function (n) {
+      /* 抽屉 / 左栏浮层是 position:fixed，offsetParent 恒为 null，不能用它判可见性。 */
+      return !n.disabled && n.getAttribute('aria-hidden') !== 'true' && n.getClientRects().length > 0;
+    });
+  }
+
+  function focusFirstPanelNode(panel, preferred) {
+    var target = preferred || (focusablesIn(panel)[0] || null);
+    if (!target) return;
+    try { target.focus(); } catch (e) { /* 无焦点支持时保持原焦点 */ }
+  }
+
   function setDrawerTab(tab) {
     var tt = $('tab-tables'), td = $('tab-dialect');
-    if (tt) { tt.classList.toggle('on', tab === 'tables'); tt.setAttribute('aria-selected', String(tab === 'tables')); }
-    if (td) { td.classList.toggle('on', tab === 'dialect'); td.setAttribute('aria-selected', String(tab === 'dialect')); }
+    if (tt) {
+      tt.classList.toggle('on', tab === 'tables');
+      tt.setAttribute('aria-selected', String(tab === 'tables'));
+      tt.setAttribute('tabindex', tab === 'tables' ? '0' : '-1');
+    }
+    if (td) {
+      td.classList.toggle('on', tab === 'dialect');
+      td.setAttribute('aria-selected', String(tab === 'dialect'));
+      td.setAttribute('tabindex', tab === 'dialect' ? '0' : '-1');
+    }
     show($('panel-tables'), tab === 'tables');
     show($('panel-dialect'), tab === 'dialect');
   }
 
   function openDrawer(tab) {
     setDrawerTab(tab);
+    /* C：记录来源，打开后聚焦对应页签；关闭时归还来源。 */
+    panelReturnFocus = document.activeElement;
     show($('drawer'), true);
     var d = $('drawer');
     if (d) d.setAttribute('aria-hidden', 'false');
     show($('scrim'), true);
     openPanel = 'drawer';
+    focusFirstPanelNode(d, tab === 'dialect' ? $('tab-dialect') : $('tab-tables'));
   }
 
   function openRail() {
     var r = $('rail');
+    panelReturnFocus = document.activeElement;
     if (r) r.classList.add('is-open');
     show($('scrim'), true);
     openPanel = 'rail';
+    var search = $('rail-search');
+    focusFirstPanelNode(r, search || $('btn-rail'));
   }
 
   function closePanel() {
-    show($('drawer'), false);
-    var d = $('drawer');
-    if (d) d.setAttribute('aria-hidden', 'true');
+    var wasOpen = openPanel;
+    var drawer = $('drawer');
+    show(drawer, false);
+    if (drawer) drawer.setAttribute('aria-hidden', 'true');
     var r = $('rail');
     if (r) r.classList.remove('is-open');
     show($('scrim'), false);
     openPanel = null;
+    /* C：关闭后焦点回到来源；来源已不可用时保持现状，不把焦点丢到隐藏节点。 */
+    var back = panelReturnFocus;
+    panelReturnFocus = null;
+    if (wasOpen && back && document.contains(back)) {
+      var hidden = back.getClientRects().length === 0 && back !== $('btn-rail');
+      if (!hidden) { try { back.focus(); } catch (e) { /* 保持现状 */ } }
+    }
   }
 
   /* ------------------------------ 单关渲染 ------------------------------ */
@@ -4740,6 +4914,8 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     show($('verdict'), false);
     var vbox = $('verdict');
     if (vbox) vbox.classList.remove('is-stale');
+    var nextBtn0 = $('btn-next-primary');
+    if (nextBtn0) nextBtn0.removeAttribute('aria-describedby');
     show($('result-block'), false);
     show($('answer-block'), false);
     show($('today-wrap'), false);
@@ -4828,8 +5004,18 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
   function showResultTab(which) {
     var mine = $('tab-mine'), refTab = $('tab-ref');
-    if (mine) mine.classList.toggle('on', which === 'mine');
-    if (refTab) refTab.classList.toggle('on', which === 'ref');
+    if (mine) {
+      mine.classList.toggle('on', which === 'mine');
+      mine.setAttribute('aria-selected', String(which === 'mine'));
+      mine.setAttribute('tabindex', which === 'mine' ? '0' : '-1');
+    }
+    if (refTab) {
+      refTab.classList.toggle('on', which === 'ref');
+      refTab.setAttribute('aria-selected', String(which === 'ref'));
+      refTab.setAttribute('tabindex', which === 'ref' ? '0' : '-1');
+    }
+    var panel = $('result-panel');
+    if (panel) panel.setAttribute('aria-labelledby', which === 'mine' ? 'tab-mine' : 'tab-ref');
     var note = $('result-note');
     var table = $('result-table');
 
@@ -4931,7 +5117,12 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     box.className = 'card-note ' + (VERDICT_MOD[kind] || 'is-warn') + (info.stale ? ' is-stale' : '');
     box.textContent = '';
     box.appendChild(el('div', title, 'verdict-title'));
-    if (extraNote) box.appendChild(el('div', extraNote, 'muted'));
+    if (extraNote) {
+      var noteEl = el('div', extraNote, 'muted');
+      /* H：给「下一步」主按钮一个可被 aria-describedby 引用的短通过摘要。 */
+      if (kind === 'pass') noteEl.id = 'pass-summary';
+      box.appendChild(noteEl);
+    }
 
     var fmtDiff = function (d) {
       var label = d.kind === 'extra' ? '多余行' : d.kind === 'missing' ? '缺失行' : '不一致行';
@@ -5006,9 +5197,21 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }
     if (info.stale) box.appendChild(el('div', '已过期，需重新运行 / 判题（旧结论仅作历史参考）。', 'muted stale-note'));
     show(box, true);
+    /* H/J：把「下一步」主按钮与短通过摘要 / 段末总结标题关联起来。 */
+    if (kind === 'pass') {
+      var nextBtn = $('btn-next-primary');
+      if (nextBtn) {
+        var described = [];
+        if (extraNote) described.push('pass-summary');
+        if (info.sectionCompleted) described.push('section-summary-title');
+        if (described.length) nextBtn.setAttribute('aria-describedby', described.join(' '));
+        else nextBtn.removeAttribute('aria-describedby');
+      }
+    }
     /* GF1-G：失败不再 shake 编辑器。GF1-H：通过用 hr-pop（240ms、无回弹）。过期结论不播装饰动画。 */
-    /* 段通关用 hr-summary-in 替换普通通过的 hr-pop，不叠加。 */
-    if (!info.stale && !(kind === 'pass' && info.sectionCompleted)) {
+    /* I/J：只有本次首次完成触发 B；段通关用 hr-summary-in 替换 B；重复 / 回看 / 改写不播放。 */
+    var noCelebrate = kind === 'pass' && info.celebrate === false;
+    if (!info.stale && !(kind === 'pass' && info.sectionCompleted) && !noCelebrate) {
       replayAnim(box, kind === 'pass' ? 'hr-anim-pop' : 'hr-anim-fade-up');
     }
   }
@@ -5212,15 +5415,19 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       saveProgress();
       var trans = L.sectionTransition(state, SECTIONS, q.id);
       var sectionCompleted = !!(trans && trans.completed);
-      var combined = sectionCompleted && !!credit.goalMet;
+      /* I：目标是否达成只看持久状态，不用重复事件返回的默认 credit.goalMet=false。 */
+      var goalMetNow = L.goalMet(state);
+      var combined = sectionCompleted && goalMetNow;
       lastCombined = combined ? { section: trans.section } : null;
       var firstDone = !!fb.firstTime && !fb.duplicate && !edited;
       renderSectionSummary(trans, combined, !edited);
+      /* J：庆祝 seen 标记与进度一起落盘，刷新后回看不补播。 */
+      saveProgress();
       var justCelebrated = !!credit.goalCelebrated && !prevCelebrated;
-      if (credit.goalMet && !combined) showTodayWrap(justCelebrated && !edited);
-      else if (!credit.goalMet) show($('today-wrap'), false);
+      if (goalMetNow && !combined) showTodayWrap(justCelebrated && !edited);
+      else if (!goalMetNow) show($('today-wrap'), false);
       if (edited) { var nb = $('next-action'); if (nb) nb.hidden = true; }
-      else renderNextAction({ sectionCompleted: sectionCompleted, goalMet: !!credit.goalMet });
+      else renderNextAction({ sectionCompleted: sectionCompleted, goalMet: goalMetNow });
       renderPostPass(q);
       show($('post-pass-block'), true);
       /* H：区分本次首次完成 / 重复提交 / 回看，文案不含任何奖励措辞。 */
@@ -5228,11 +5435,13 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (fb.duplicate) { title = '通过 · 与上次结果一致'; passNote = '重复提交，完成题数未变化。'; }
       else if (firstDone) {
         title = '通过 · 首次完成';
-        passNote = '结果集与预期一致。第 ' + (trans ? trans.section : '?') + ' 段已完成 ' +
-          (trans ? trans.passed : '?') + '/' + (trans ? trans.total : '?') + '。';
+        /* I：只报本次真实的段内推进，不写奖励倍数 / 连击。 */
+        var fromN = trans ? Math.max(0, trans.passed - 1) : 0;
+        passNote = '结果集与预期一致。第 ' + (trans ? trans.section : '?') + ' 段：' +
+          fromN + '/' + (trans ? trans.total : '?') + ' → ' + (trans ? trans.passed : '?') + '/' + (trans ? trans.total : '?') + '。';
       }
       else if (fb.reviewResolved) { title = '通过 · 复查完成'; passNote = '本次复查已通过，这题移出待复查列表。'; }
-      else { title = '通过 · 改写通过'; passNote = '结果与预期一致；本题此前已完成，完成题数未变化。'; }
+      else { title = '通过 · 改写通过'; passNote = '改写通过，本题已完成；完成题数未变化。'; }
       if (fb.completionType === 'guided') passNote += ' 本次为跟练完成；已安排复查。';
       if (edited) passNote += '（提交后已修改，本结论为提交版本的历史结果，需重新判题。）';
       /* 只有同段首次完成才把进度条按 120ms 延迟演到新比例。 */
@@ -5241,6 +5450,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
         action: null,
         orderSensitive: orderSensitive,
         sectionCompleted: sectionCompleted,
+        celebrate: firstDone,
         stale: edited
       });
     } else {
@@ -5422,6 +5632,9 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     $('btn-run').addEventListener('click', doRun);
     $('btn-judge').addEventListener('click', doJudge);
     $('btn-answer').addEventListener('click', doAnswer);
+    /* L：编辑操作区的次级退出入口；已达目标时主按钮是同名动作。 */
+    var wrapBtn = $('btn-wrap');
+    if (wrapBtn) wrapBtn.addEventListener('click', function () { showTodayWrap(false); });
 
     var sqlInput = $('sql-input');
     /* Tab 插入两个空格，不把焦点跳走（键盘用户友好） */
@@ -5458,7 +5671,11 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       }
     });
     sqlInput.addEventListener('input', onSqlEdit);
-    sqlInput.addEventListener('blur', function () { hideSuggest(); });
+    sqlInput.addEventListener('blur', function () {
+      /* L：记住选区，返回练习时恢复。 */
+      lastSel = [sqlInput.selectionStart, sqlInput.selectionEnd];
+      hideSuggest();
+    });
 
     /* 左栏：搜索 + 筛选 popover */
     var rs = $('rail-search');
@@ -5502,6 +5719,11 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     $('scrim').addEventListener('click', closePanel);
     $('tab-tables').addEventListener('click', function () { setDrawerTab('tables'); });
     $('tab-dialect').addEventListener('click', function () { setDrawerTab('dialect'); });
+    /* C/E：抽屉 tablist 方向键切换 + roving tabindex。 */
+    wireTablist([$('tab-tables'), $('tab-dialect')], function (t) {
+      setDrawerTab(t === $('tab-tables') ? 'tables' : 'dialect');
+    });
+    setDrawerTab('tables');
     var ts = $('tables-search');
     if (ts) ts.addEventListener('input', function () { renderTablesPanel(this.value); });
     renderTablesPanel('');
@@ -5515,10 +5737,33 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       });
     }
 
-    /* 结果区 tab */
+    /* 结果区 tab（E）：点击 + ←/→ 方向键都能切换，aria-selected / tabindex 同步。 */
     var tm = $('tab-mine'), tr = $('tab-ref');
     if (tm) tm.addEventListener('click', function () { showResultTab('mine'); });
     if (tr) tr.addEventListener('click', function () { showResultTab('ref'); });
+    wireTablist([tm, tr], function (t) { showResultTab(t === tm ? 'mine' : 'ref'); });
+    if (tm) tm.setAttribute('tabindex', '0');
+    if (tr) tr.setAttribute('tabindex', '-1');
+    showResultTab('mine');
+
+    /* L：今日收束卡的「返回练习」与「重试保存」。 */
+    var wrapBack = $('btn-wrap-back');
+    if (wrapBack) wrapBack.addEventListener('click', function () {
+      var ta = $('sql-input');
+      if (!ta) return;
+      if (lastSel) { try { ta.setSelectionRange(lastSel[0], lastSel[1]); } catch (e) { /* 选区不可恢复时只聚焦 */ } }
+      ta.focus();
+      try { ta.scrollIntoView({ block: 'nearest' }); } catch (e) { /* 只聚焦 */ }
+    });
+    var retrySave = $('btn-retry-save');
+    if (retrySave) retrySave.addEventListener('click', function () {
+      var ok = saveProgress();
+      renderStats();
+      var box = $('today-wrap');
+      if (box && !box.hidden) $('today-wrap-body').textContent = todayWrapText();
+      updatePersistNotes();
+      announce(ok && STORAGE_OK ? '已重新保存到浏览器。' : '保存仍未成功，进度仅保留在本页。');
+    });
 
     /* 窄屏：左栏抽屉 */
     var br = $('btn-rail');
@@ -5530,6 +5775,19 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       if (openPanel) { closePanel(); return; }
       if (recPanel && !recPanel.hidden) { setRecord(false); if (recBtn) recBtn.focus(); return; }
       if (resetPanel && !resetPanel.hidden) { resetPanel.hidden = true; return; }
+    });
+
+    /* C：浮层打开时 Tab 在浮层内循环，背景不接收焦点。 */
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || !openPanel) return;
+      var panel = openPanel === 'drawer' ? $('drawer') : $('rail');
+      var f = focusablesIn(panel);
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      var active = document.activeElement;
+      var outside = !panel.contains(active);
+      if (e.shiftKey && (active === first || outside)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (active === last || outside)) { e.preventDefault(); first.focus(); }
     });
 
     /* 学习记录：可折叠面板，展开 / 收起带 aria-expanded，键盘可达。 */
@@ -5618,7 +5876,10 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }
     checkForbidden();
     updateSuggest();
-    updateEditorStatus();
+    /* D/I：立即写当前状态；保存反馈合并到停止输入 400ms 后显示一次。 */
+    editorStatusSave = '';
+    paintEditorStatus();
+    scheduleSaveStatus();
   }
 
   /* ------------------------------ 启动 ------------------------------ */

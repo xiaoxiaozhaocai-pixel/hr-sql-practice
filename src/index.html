@@ -169,10 +169,19 @@
           <button id="btn-run" type="button" class="btn primary">运行</button>
           <button id="btn-judge" type="button" class="btn dark">判题</button>
           <button id="btn-answer" type="button" class="btn ghost">查看答案</button>
+          <button id="btn-wrap" type="button" class="btn ghost">今天先到这里</button>
           <span class="hint" id="run-hint"></span>
         </div>
 
         <div id="verdict" class="card-note" role="region" aria-label="判题结论" hidden=""></div>
+
+        <section class="card section-summary" id="section-summary" hidden="" role="region" aria-label="段末总结">
+          <h3 id="section-summary-title"></h3>
+          <p id="section-summary-body"></p>
+          <h4>本段主要考点</h4>
+          <ul id="section-summary-points" class="summary-points"></ul>
+          <div id="section-summary-due" class="muted"></div>
+        </section>
 
         <div id="next-action" class="next-action" hidden="">
           <button id="btn-next-primary" type="button" class="btn primary"></button>
@@ -182,11 +191,11 @@
 
       <section class="card" id="result-block" hidden="">
         <div class="tabs" role="tablist" aria-label="结果视图">
-          <button id="tab-mine" type="button" class="on" role="tab" aria-selected="true" aria-controls="result-table">我的结果</button>
-          <button id="tab-ref" type="button" role="tab" aria-selected="false" aria-controls="result-table">预期结果</button>
+          <button id="tab-mine" type="button" class="on" role="tab" aria-selected="true" aria-controls="result-panel" tabindex="0">我的结果</button>
+          <button id="tab-ref" type="button" role="tab" aria-selected="false" aria-controls="result-panel" tabindex="-1">预期结果</button>
         </div>
         <div id="result-note" class="muted result-note"></div>
-        <div class="tablewrap"><table id="result-table"></table></div>
+        <div class="tablewrap" id="result-panel" role="tabpanel" aria-labelledby="tab-mine"><table id="result-table"></table></div>
       </section>
 
       <section class="card" id="answer-block" hidden="">
@@ -207,17 +216,13 @@
         <p id="q-dialect"></p>
       </section>
 
-      <section class="card section-summary" id="section-summary" hidden="" aria-label="段末总结">
-        <h3 id="section-summary-title"></h3>
-        <p id="section-summary-body"></p>
-        <h4>本段主要考点</h4>
-        <ul id="section-summary-points" class="summary-points"></ul>
-        <div id="section-summary-due" class="muted"></div>
-      </section>
-
       <section class="card today-wrap" id="today-wrap" hidden="" aria-label="今日收束">
         <h3 id="today-wrap-title"></h3>
         <p id="today-wrap-body"></p>
+        <div class="today-actions">
+          <button id="btn-wrap-back" type="button" class="btn primary sm">返回练习</button>
+          <button id="btn-retry-save" type="button" class="btn ghost sm" hidden="">重试保存</button>
+        </div>
       </section>
     </div>
   </section>
@@ -226,20 +231,20 @@
 <div id="scrim" class="scrim" hidden=""></div>
 <aside id="drawer" class="drawer" hidden="" aria-hidden="true">
   <div class="dh">
-    <div class="drawer-tabs" role="tablist">
-      <button id="tab-tables" type="button" class="dtab on" role="tab" aria-selected="true">表结构</button>
-      <button id="tab-dialect" type="button" class="dtab" role="tab" aria-selected="false">方言对照</button>
+    <div class="drawer-tabs" role="tablist" aria-label="表结构 / 方言对照">
+      <button id="tab-tables" type="button" class="dtab on" role="tab" aria-selected="true" aria-controls="panel-tables" tabindex="0">表结构</button>
+      <button id="tab-dialect" type="button" class="dtab" role="tab" aria-selected="false" aria-controls="panel-dialect" tabindex="-1">方言对照</button>
     </div>
     <span class="esc">Esc 关闭</span>
     <button id="drawer-close" type="button" class="icon-btn" title="关闭">关闭</button>
   </div>
   <div class="dbody">
-    <div id="panel-tables" class="tables-panel">
+    <div id="panel-tables" class="tables-panel" role="tabpanel" aria-labelledby="tab-tables">
       <ul class="panel-meta"><li>11 张表 + 3 个视图</li><li>只列结构，不含数据行</li><li>行数为全表行数，不是你本题的答案行数</li></ul>
       <input id="tables-search" type="search" class="tables-search" placeholder="搜索表名 / 字段名，如 HR_EMPLOYEE、NetPay" autocomplete="off"/>
       <div id="tables-list" class="tables-list"></div>
     </div>
-    <div id="panel-dialect" class="tables-panel" hidden="">
+    <div id="panel-dialect" class="tables-panel" hidden="" role="tabpanel" aria-labelledby="tab-dialect">
       <dl class="dict">
         <dt>网页引擎</dt><dd>SQLite（权威源 = SQL Server）</dd>
         <dt>TOP n</dt><dd>→ LIMIT n</dd>
@@ -260,7 +265,7 @@
 <footer class="foot">
   题库与逻辑分离：题目全部来自 <code>data/questions.json</code>，关卡编排在 <code>src/levels.js</code>，
   渲染 / 判题 / 存储各自独立。全部数据为虚构示例，与任何真实单位、系统、个人无关。
-  进度只存在本机浏览器 <code>localStorage</code>（键 <code>dbquest.v2</code>），刷新不丢。
+  <span id="foot-persist">进度只存在本机浏览器 <code>localStorage</code>（键 <code>dbquest.v2</code>），刷新不丢。</span>
   <a class="foot-link" href="https://github.com/xiaoxiaozhaocai-pixel/hr-sql-practice" target="_blank" rel="noopener">GitHub · 源码与许可</a>
 </footer>
 

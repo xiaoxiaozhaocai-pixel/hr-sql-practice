@@ -526,3 +526,47 @@ test('sectionTransition_returns_null_for_unknown_question_or_empty_sections', ()
   assert.equal(L.sectionTransition(s, [], 'q001'), null);
   assert.equal(L.markSectionSummarySeen(s, null), false, '空段号不标记');
 });
+
+/* ---------------------------- GF2 P1：连续通过与重试边界 ---------------------------- */
+
+test('gf2_duplicate_pass_keeps_section_progress_flat', () => {
+  const sec = SECTIONS[0];
+  const q = sec.questions[0];
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+
+  const p = L.recordLearningAttempt(s, checkEv(q.id, 1, true, DAY));
+  L.creditLearningEvent(s, Object.assign({}, p, { stamp: DAY }));
+  const t1 = L.sectionTransition(s, SECTIONS, q.id);
+  assert.equal(t1.passed, 1, '首次完成推进一段');
+
+  const dup = L.recordLearningAttempt(s, checkEv(q.id, 1, true, DAY));
+  assert.equal(dup.duplicate, true, '同题同 SQL 再提交应为 duplicate');
+  const cdup = L.creditLearningEvent(s, Object.assign({}, dup, { stamp: DAY }));
+  assert.equal(cdup.credited, false, '重复提交不重复计入');
+  const t2 = L.sectionTransition(s, SECTIONS, q.id);
+  assert.equal(t2.passed, t1.passed, '重复通过不得增长段进度（不播放 B/D 的依据）');
+});
+
+test('gf2_goalMet_reads_persistent_state_not_duplicate_event_default', () => {
+  const q = SECTIONS[0].questions[0];
+  const s = L.freshState();
+  L.ensureLearningDay(s, DAY);
+  s.learning.daily.goal = 1;
+
+  const p = L.recordLearningAttempt(s, checkEv(q.id, 1, true, DAY));
+  L.creditLearningEvent(s, Object.assign({}, p, { stamp: DAY }));
+  assert.equal(L.goalMet(s), true, '首次完成后目标达成');
+
+  const dup = L.recordLearningAttempt(s, checkEv(q.id, 1, true, DAY));
+  const cdup = L.creditLearningEvent(s, Object.assign({}, dup, { stamp: DAY }));
+  assert.equal(cdup.goalMet, false, '重复事件的默认返回值为 false');
+  assert.equal(L.goalMet(s), true, 'UI 必须读 L.goalMet(state)，不能把重复事件默认值当成目标退回未完成');
+});
+
+test('gf2_section_summary_seen_is_first_time_only', () => {
+  const s = L.freshState();
+  assert.equal(L.markSectionSummarySeen(s, 2), true, '首次展示段末总结返回 true');
+  assert.equal(L.markSectionSummarySeen(s, 2), false, '回看不得再次庆祝');
+  assert.equal(s.learning.sectionSummarySeen[2], true, 'seen 标记必须落进 state 以便随进度保存');
+});

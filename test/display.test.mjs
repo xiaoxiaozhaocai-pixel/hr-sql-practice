@@ -111,3 +111,94 @@ test('output_hint_never_promises_ordering_when_flag_is_false', () => {
     .map((q) => q.id);
   assert.deepEqual(promiseOnly, [], '集合比对的题不得在输出提示里要求排序（提示与判分必须一致）');
 });
+
+/* ---------------------------- GF2 P1：渲染 / 交互接线守门 ----------------------------
+ * app.js 是浏览器 IIFE，无 DOM 时不执行；下列断言固定在源码接线层面，
+ * 防止后续重构把进入题目、保存合并、方向键 tablist、退出返回与段末位置改掉。
+ */
+
+const APP_SRC = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+const HTML_SRC = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
+const CSS_SRC = fs.readFileSync(path.join(ROOT, 'src', 'style.css'), 'utf8');
+
+test('gf2_enter_question_copy_and_focus_wiring', () => {
+  for (const copy of ['本题尚未判题', '已恢复本题草稿，继续编辑', '本题已完成，可改写练习']) {
+    assert.ok(APP_SRC.includes(copy), `进入题目文案缺失：${copy}`);
+  }
+  assert.match(APP_SRC, /function enterAnnouncement/, '需要「段内位置 + 恢复状态」的进入播报');
+  assert.match(APP_SRC, /title\.focus/, '用户主动选题后焦点应落到 #q-title');
+  /* B 的已知 bug：位置不能传题目对象（会播报第 0 题）。 */
+  assert.doesNotMatch(APP_SRC, /sectionIndexOf\(sec,\s*q\)/, 'renderNav 位置不得再传题目对象');
+  assert.match(APP_SRC, /sectionIndexOf\(sec,\s*q\.id\)/, 'renderNav 位置必须传题目 id');
+});
+
+test('gf2_syntax_confirm_focus_and_start_sql_entry', () => {
+  assert.match(APP_SRC, /function refreshSyntaxStart/, '需要「最后一张未读语法卡确认后呈现开始写 SQL」');
+  assert.ok(APP_SRC.includes('开始写 SQL'), '缺少开始写 SQL 入口');
+  assert.match(APP_SRC, /querySelector\('\.syntax-review-toggle'\)/, '确认后焦点应去替换后的回看按钮');
+  assert.match(APP_SRC, /replayAnim\(ul\.lastChild/, '只有新展开的提示用 A 动画');
+});
+
+test('gf2_editor_status_merges_save_feedback_after_400ms', () => {
+  assert.match(APP_SRC, /function scheduleSaveStatus/, '需要合并保存反馈的调度函数');
+  assert.match(APP_SRC, /var delay = prefersReducedMotion\(\) \? 0 : 400/, '保存反馈合并窗口应为 400ms（减弱动画下为 0）');
+  assert.ok(APP_SRC.includes('草稿已保存到此浏览器'), '真实写入文案缺失');
+  assert.ok(APP_SRC.includes('草稿仅暂存在本页，关闭可能丢失'), '仅内存态文案缺失');
+  assert.match(APP_SRC, /clearTimeout\(editorStatusTimer\)/, '运行 / 判题结束时必须清掉待播的旧保存文案');
+});
+
+test('gf2_pass_celebration_only_on_first_completion', () => {
+  assert.match(APP_SRC, /celebrate:\s*firstDone/, '只有首次完成触发 B');
+  assert.match(APP_SRC, /info\.celebrate === false/, '非首次通过不得播放 pop');
+  assert.ok(APP_SRC.includes('pass-summary'), '短通过摘要需要可被 aria-describedby 引用的 id');
+  assert.match(APP_SRC, /L\.goalMet\(state\)/, '今日目标应读持久状态');
+});
+
+test('gf2_exit_and_return_wiring', () => {
+  for (const id of ['btn-wrap', 'btn-wrap-back', 'btn-retry-save', 'foot-persist', 'today-wrap-title']) {
+    assert.ok(HTML_SRC.includes('id="' + id + '"'), `index.html 缺少 #${id}`);
+  }
+  assert.ok(APP_SRC.includes('今天到这里：新完成'), '收束文案必须写清新完成 / 复查数量');
+  assert.ok(APP_SRC.includes('下次从 #'), '收束文案必须给出下一次继续的题号');
+  assert.match(APP_SRC, /function showTodayWrap/, '收束入口应存在');
+  assert.match(APP_SRC, /function saveSentence/, '保存成功 / 仅内存暂存必须分开表达');
+});
+
+test('gf2_section_summary_sits_between_verdict_and_next_action', () => {
+  const verdict = HTML_SRC.indexOf('id="verdict"');
+  const summary = HTML_SRC.indexOf('id="section-summary"');
+  const next = HTML_SRC.indexOf('id="next-action"');
+  assert.ok(verdict > -1 && summary > -1 && next > -1, '三块都必须存在');
+  assert.ok(verdict < summary && summary < next, '段末总结必须在判定之后、下一步之前');
+  assert.match(HTML_SRC, /id="section-summary"[^>]*role="region"/, '段末总结需要 region 名称');
+});
+
+test('gf2_tablists_have_roving_tabindex_and_arrow_keys', () => {
+  assert.match(APP_SRC, /function wireTablist/, '需要 tablist 方向键处理');
+  assert.match(APP_SRC, /ArrowRight/);
+  assert.match(APP_SRC, /ArrowLeft/);
+  assert.match(APP_SRC, /setAttribute\('tabindex'/, '需要 roving tabindex 管理');
+  assert.match(HTML_SRC, /id="result-panel"[^>]*role="tabpanel"/, '结果区应有 tabpanel 关联');
+  for (const t of ['tab-mine', 'tab-ref', 'tab-tables', 'tab-dialect']) {
+    assert.ok(HTML_SRC.includes('id="' + t + '"'), `缺少页签 #${t}`);
+  }
+});
+
+test('gf2_next_primary_is_described_by_short_pass_summary', () => {
+  assert.match(APP_SRC, /aria-describedby/, '下一步主按钮应关联短通过摘要');
+  assert.match(APP_SRC, /'section-summary-title'/, '段通关时还应关联段末总结标题');
+  assert.match(HTML_SRC, /id="section-summary-title"/, '段末总结标题 id 必须存在');
+});
+
+test('gf2_dead_heart_rules_removed_and_motion_budget_intact', () => {
+  assert.doesNotMatch(CSS_SRC, /\.stat-hearts/, '.stat-hearts 已是死规则，必须删除');
+  assert.doesNotMatch(CSS_SRC, /\.level-hearts/, '.level-hearts 已是死规则，必须删除');
+  assert.doesNotMatch(CSS_SRC, /hr-shake/, '不得重新引入 hr-shake');
+  assert.doesNotMatch(CSS_SRC, /transition:\s*width/, '进度过渡不得改回 width');
+  const keyframes = CSS_SRC.match(/@keyframes\s+[\w-]+/g) || [];
+  assert.deepEqual(
+    keyframes.map((k) => k.replace(/\s+/, ' ')).sort(),
+    ['@keyframes hr-fade-up', '@keyframes hr-pop', '@keyframes hr-summary-in'],
+    '关键帧只允许三个',
+  );
+});

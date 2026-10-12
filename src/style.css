@@ -77,9 +77,7 @@ button { font: inherit; cursor: pointer; }
 .bar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left center; transform: scaleX(0); transition: transform 220ms cubic-bezier(.2,0,0,1); }
 .stat { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.stat-hearts { color: var(--accent); letter-spacing: 1px; }
 .stat-goal.is-met { color: var(--ok); font-weight: 600; }
-.level-hearts { font-size: 12px; color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
 
 /* ---------------------------- 横幅（与提示/警告/错误共用同一套卡片样式） ---------------------------- */
 .banner {
@@ -408,6 +406,7 @@ pre {
 .today-list li.is-review .t-status { color: var(--accent); }
 .next-action { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .section-summary, .today-wrap { margin-top: 12px; }
+.today-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .summary-points { margin: 6px 0 8px; padding-left: 20px; }
 
 /* ---------------------------- 问一问（本地问答面板，默认收起） ---------------------------- */
