@@ -130,7 +130,7 @@ test('active_days_increments_on_yesterday_and_restarts_after_long_gap', () => {
   assert.equal(s.learning.activity.activeDays, 2, '上次为昨天 → activeDays +1');
   passNew('q003', '2026-07-04');
   assert.equal(s.learning.activity.activeDays, 1, '离开 3 天 → 重新从 1 计');
-  assert.equal(s.xp, 30, '离开期间不改 xp / passed');
+  assert.equal(s.xp, 0, 'GF1-A：通过不再累计 XP；离开期间不改 passed');
   assert.equal(s.passed.q001 && s.passed.q002 && s.passed.q003, true);
 });
 
@@ -181,11 +181,12 @@ test('duplicate_check_of_same_sql_in_same_round_does_not_double_charge', () => {
   L.ensureLearningDay(s, '2026-06-30');
   const a = L.recordLearningAttempt(s, { id: 'q001', kind: 'check', sql: 'SELECT A', ok: false, stamp: '2026-06-30', referenceAvailable: true, execOk: true });
   assert.equal(a.counted, true);
-  assert.equal(a.attemptsLeft, 2);
+  assert.equal(a.attemptsLeft, 3, 'GF1-A：判错不扣可用次数');
+  assert.equal(a.wrongNo, 1, 'GF1-A：判错只累计供提示分层的次数');
   const b = L.recordLearningAttempt(s, { id: 'q001', kind: 'check', sql: 'SELECT A', ok: false, stamp: '2026-06-30', referenceAvailable: true, execOk: true });
   assert.equal(b.duplicate, true, '同轮同 SQL 重复检查');
   assert.equal(b.showPrevious, true, '返回「展示上次反馈」标记');
-  assert.equal(s.learning.attempts.q001.attemptsLeft, 2, '重复检查不重复扣次数');
+  assert.equal(s.learning.attempts.q001.attemptsLeft, 3, '重复检查同样不扣次数');
   assert.equal(s.learning.attempts.q001.round, 1, '不新开作答轮');
 });
 
@@ -199,7 +200,7 @@ test('non_effective_check_does_not_charge_attempt_or_touch_review', () => {
   assert.equal(exec.reason, 'sql-error', 'SQL 执行错误不扣次数');
   const pend = L.recordLearningAttempt(s, { id: 'q001', kind: 'check', sql: 'SELECT 2', ok: false, stamp: '2026-06-30', referenceAvailable: true, execOk: true, pendingReview: true });
   assert.equal(pend.skipped, true, '题库待复核不判对错');
-  assert.equal(s.learning.attempts.q001.attemptsLeft, 3, '三次无效检查后次数仍为 3');
+  assert.equal(s.learning.attempts.q001.attemptsLeft, 3, 'GF1-A：无效检查不扣次数，判错也不扣');
   assert.equal(s.learning.review.q001, undefined);
   assert.equal(s.passed.q001, undefined);
 });
@@ -209,7 +210,8 @@ test('same_question_credits_once_per_day_even_across_multiple_passes', () => {
   const p1 = L.recordLearningAttempt(s, checkEv('q001', 1, true, '2026-06-30'));
   const c1 = L.creditLearningEvent(s, Object.assign({}, p1, { stamp: '2026-06-30' }));
   assert.equal(c1.credited, true);
-  assert.equal(c1.xpGained, 10);
+  assert.equal(c1.xpGained, 0, 'GF1-A：不再累计 XP');
+  assert.equal(s.xp, 0, 'GF1-A：xp 字段保留兼容但不再增长');
   const p2 = L.recordLearningAttempt(s, checkEv('q001', 2, true, '2026-06-30'));
   const c2 = L.creditLearningEvent(s, Object.assign({}, p2, { stamp: '2026-06-30' }));
   assert.equal(p2.firstTime, false);
@@ -223,16 +225,17 @@ test('same_question_credits_once_per_day_even_across_multiple_passes', () => {
   assert.equal(s.learning.daily.creditedIds.length, 0);
 });
 
-test('xp_is_capped_at_1200_and_first_pass_still_records', () => {
+test('legacy_xp_field_is_preserved_but_no_longer_awarded', () => {
   const s = L.freshState();
   L.ensureLearningDay(s, '2026-06-30');
   s.xp = 1200;
   const p = L.recordLearningAttempt(s, checkEv('q001', 1, true, '2026-06-30'));
   const c = L.creditLearningEvent(s, Object.assign({}, p, { stamp: '2026-06-30' }));
-  assert.equal(c.xpGained, 0, '封顶后不再发 XP');
-  assert.equal(s.xp, 1200);
-  assert.equal(p.firstTime, true, '封顶不影响首次通过记录');
+  assert.equal(c.xpGained, 0, 'GF1-A：通过不再发 XP');
+  assert.equal(s.xp, 1200, '旧存档 xp 字段原样保留');
+  assert.equal(p.firstTime, true, '不影响首次通过记录');
   assert.equal(s.passed.q001, true);
+  assert.equal(c.credited, true, '仍计入今日已完成集合');
 });
 
 /* ---------------------------- 复查轮次 ---------------------------- */
@@ -269,7 +272,7 @@ test('review_cycle_goes_needsFix_to_due_then_resolved_without_reward_on_first_da
   assert.equal(s.learning.daily.creditedIds.filter((x) => x === 'q001').length, 1, '同日同题最多计 1');
 });
 
-test('guided_and_answer_seen_persist_and_guidedReset_restores_attempts', () => {
+test('guided_and_answer_seen_persist_and_no_longer_force_guided_mode', () => {
   const s = L.freshState();
   L.ensureLearningDay(s, '2026-06-30');
   L.recordLearningAttempt(s, { id: 'q001', kind: 'answer', stamp: '2026-06-30' });
@@ -278,11 +281,11 @@ test('guided_and_answer_seen_persist_and_guidedReset_restores_attempts', () => {
   for (let i = 0; i < 3; i++) {
     L.recordLearningAttempt(s, checkEv('q001', i, false, '2026-06-30'));
   }
-  assert.equal(s.learning.attempts.q001.attemptsLeft, 0);
-  assert.equal(s.learning.attempts.q001.mode, 'guided', '扣光后进入引导态');
+  assert.equal(s.learning.attempts.q001.attemptsLeft, 3, 'GF1-A：判错不扣次数，永远不为 0');
+  assert.equal(s.learning.attempts.q001.mode, 'independent', 'GF1-A：判错不再强制转 guided');
+  assert.equal(s.learning.attempts.q001.wrongNo, 3, '判错次数只用于提示分层');
   const g = L.recordLearningAttempt(s, { id: 'q001', kind: 'guidedReset', stamp: '2026-06-30' });
-  assert.equal(g.attemptsLeft, 3, '引导态重置回满 3 次');
-  assert.equal(g.mode, 'guided', 'mode 仍记有辅助历史');
+  assert.equal(g.attemptsLeft, 3, '引导态兼容入口仍把次数留在 3');
   assert.equal(s.learning.attempts.q001.answerSeen, true, '跟练标记持久到本轮结束');
 });
 

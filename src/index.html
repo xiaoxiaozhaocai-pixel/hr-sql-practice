@@ -28,8 +28,6 @@
     <button id="record-close" type="button" class="icon-btn" title="收起">收起</button>
   </div>
   <div class="record-grid">
-    <span id="stat-xp" class="stat">XP 0</span>
-    <span id="stat-streak" class="stat" title="有计分的日子才累计">连续 0 天</span>
     <span id="stat-goal" class="stat stat-goal">今日 0/3</span>
     <span id="stat-progress" class="stat">已完成 0 题 · 待复查 0 题</span>
   </div>
@@ -95,7 +93,6 @@
         <div class="qhead">
           <h3 id="q-title"></h3>
           <span class="chip" id="q-level"></span>
-          <span class="level-hearts" id="q-attempts"></span>
         </div>
         <p class="metaline" id="q-meta"></p>
         <p class="q-tags" id="q-tags"></p>
@@ -162,7 +159,7 @@
         </div>
 
         <div class="editor">
-          <div class="bar2"><b>SQL 编辑器</b><span class="kbd">Ctrl/⌘ + Enter 运行</span></div>
+          <div class="bar2"><b>SQL 编辑器</b><span id="editor-status" class="editor-status"></span><span class="kbd">Ctrl/⌘ + Enter 运行</span></div>
           <textarea id="sql-input" spellcheck="false" placeholder="在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;"></textarea>
         </div>
         <div id="sql-suggest" class="sql-suggest" hidden=""></div>
@@ -175,7 +172,7 @@
           <span class="hint" id="run-hint"></span>
         </div>
 
-        <div id="verdict" class="card-note" role="status" aria-live="polite" aria-atomic="true" hidden=""></div>
+        <div id="verdict" class="card-note" role="region" aria-label="判题结论" hidden=""></div>
 
         <div id="next-action" class="next-action" hidden="">
           <button id="btn-next-primary" type="button" class="btn primary"></button>
@@ -184,9 +181,9 @@
       </section>
 
       <section class="card" id="result-block" hidden="">
-        <div class="tabs">
-          <button id="tab-mine" type="button" class="on">我的结果</button>
-          <button id="tab-ref" type="button">预期结果</button>
+        <div class="tabs" role="tablist" aria-label="结果视图">
+          <button id="tab-mine" type="button" class="on" role="tab" aria-selected="true" aria-controls="result-table">我的结果</button>
+          <button id="tab-ref" type="button" role="tab" aria-selected="false" aria-controls="result-table">预期结果</button>
         </div>
         <div id="result-note" class="muted result-note"></div>
         <div class="tablewrap"><table id="result-table"></table></div>

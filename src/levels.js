@@ -199,6 +199,7 @@
       mode: 'independent',
       answerSeen: false,
       wrongInRound: false,
+      wrongNo: 0,
       lastSql: '',
       lastCheckedStamp: null,
       lastCheckedRound: 0,
@@ -231,6 +232,7 @@
       mode: a.mode === 'guided' ? 'guided' : 'independent',
       answerSeen: a.answerSeen === true,
       wrongInRound: a.wrongInRound === true,
+      wrongNo: num(a.wrongNo, 0),
       lastSql: str(a.lastSql, ''),
       lastCheckedStamp: str(a.lastCheckedStamp, null),
       lastCheckedRound: num(a.lastCheckedRound, 0),
@@ -665,6 +667,7 @@
       mode: 'independent',
       answerSeen: false,
       wrongInRound: false,
+      wrongNo: 0,
       lastSql: str(state.sql[qid], ''),
       lastCheckedStamp: null,
       lastCheckedRound: 0,
@@ -781,6 +784,7 @@
         };
       }
       a.wrongInRound = false;
+      a.wrongNo = 0;
       a.active = false;
       a.attemptsLeft = HEARTS_PER_LEVEL;
       a.mode = 'independent';
@@ -795,9 +799,10 @@
       };
     }
 
-    /* 有效判错 */
-    if (a.attemptsLeft > 0) a.attemptsLeft -= 1;
+    /* 有效判错（GF1-A 去惩罚）：只累计供提示分层的判错次数。
+       不递减可用次数、不把 mode 切到 guided、不自动回满。attemptsLeft 仅作兼容字段保留原值。 */
     a.wrongInRound = true;
+    a.wrongNo = (typeof a.wrongNo === 'number' ? a.wrongNo : 0) + 1;
     state.wrong[id] = true;
     state.attemptWrong[id] = true;
     state.learning.review[id] = {
@@ -806,12 +811,10 @@
       note: rv ? rv.note : null,
       lastIndependentPassDay: (rv && rv.lastIndependentPassDay) || null
     };
-    var shouldRefill = a.attemptsLeft === 0;
-    if (shouldRefill) a.mode = 'guided';
     return {
       id: id, kind: kind, counted: true, correct: false, duplicate: false,
       attemptsLeft: a.attemptsLeft, mode: a.mode, needsFix: true,
-      shouldRefill: shouldRefill, needsStrategyChange: shouldRefill, wrongInRound: true, firstTime: false
+      wrongNo: a.wrongNo, wrongInRound: true, firstTime: false
     };
   }
 
@@ -855,10 +858,7 @@
     if (typeof id !== 'string' || !id) return out;
 
     if (ev.firstTime === true) {
-      var gain = XP_PER_LEVEL;
-      if (state.xp + gain > XP_CAP) gain = Math.max(0, XP_CAP - state.xp);
-      state.xp += gain;
-      out.xpGained = gain;
+      /* GF1-A：不再累计 XP（旧存档 xp 字段原样保留、只读不涨）。完成记录与今日去重不变。 */
       state.learning.completions[id] = {
         firstPassDay: today,
         completionType: ev.completionType || 'independent',

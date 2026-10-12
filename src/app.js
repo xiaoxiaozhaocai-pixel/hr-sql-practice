@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * 本次只改「UI 与信息呈现」：判题口径、题库、题目内容、数据（tables.js / 内联种子）一律未动。
  * 布局：左栏题号列表 + 主列（题面 / 深色编辑器 / 结果）；表结构、方言对照改右侧抽屉（默认收起）。
- * 游戏化：只保留段/关进度与通关徽章；XP、连击、今日配额、心形生命值全部不再呈现。
+ * 游戏化：只保留段/关进度与通关徽章；奖励经济、连击、今日配额、心形生命值全部不再呈现。
  *
  * 依赖注入关系（不变）：
  *   HR_BOOT / HRJudge / HRLevels / HRDb / HRTables；本文件只把状态渲染成 DOM、把动作转成调用。
@@ -73,6 +73,13 @@
   var suggestItems = [];      // 当前补全候选（键盘 ↑/↓ 用）
   var suggestIndex = -1;      // -1 = 未选中，Enter 保持换行语义
 
+  /* GF1-D/E/F：受理快照与事件标识。每次运行/判题固定「题号 + SQL 快照 + 递增事件号」；
+     提交后再编辑、切题或开始新一轮都会让旧快照失效，旧装饰回调不再落到新状态上。 */
+  var eventSeq = 0;
+  var accepted = null;        // { qid, sql, event, kind:'run'|'judge', stale:false }
+  var barAnimNext = false;    // 仅「同段首次完成」这一次把进度条按 120ms 延迟演到新比例
+  var barState = { section: null, ratio: 0 };
+
   /* ------------------------------ 小工具 ------------------------------ */
   function $(id) { return document.getElementById(id); }
 
@@ -89,6 +96,8 @@
      动画结束后摘掉类名（reduced-motion 下动画即时结束，行为一致，无定时器）。 */
   function replayAnim(node, cls) {
     if (!node || !node.classList) return;
+    var prev = node.__hrAnimEnd;
+    if (prev) node.removeEventListener('animationend', prev);
     node.classList.remove(cls);
     void node.offsetWidth;
     node.classList.add(cls);
@@ -96,11 +105,47 @@
       if (e.target !== node) return;
       node.classList.remove(cls);
       node.removeEventListener('animationend', onEnd);
+      if (node.__hrAnimEnd === onEnd) node.__hrAnimEnd = null;
     };
+    node.__hrAnimEnd = onEnd;
     node.addEventListener('animationend', onEnd);
   }
 
   function saveProgress() { if (state) L.saveState(storage, state); }
+
+  /* GF1-D：编辑器标题旁的静态状态文字（保存 / 已运行 / 已修改）。 */
+  function updateEditorStatus() {
+    var node = $('editor-status');
+    if (!node) return;
+    var text = '';
+    if (accepted && accepted.qid === currentId) {
+      text = accepted.stale ? '已修改，需重新运行或判题'
+        : (accepted.kind === 'run' ? '已运行，尚未判题' : '已判题');
+    } else {
+      var q = currentQuestion();
+      if (q && state && state.sql[q.id]) text = '已恢复本题草稿';
+    }
+    node.textContent = text;
+  }
+
+  /* GF1-D/E：旧运行结果 / 旧判定一旦被后续编辑或新一轮运行取代，就地标为过期；
+     只改呈现，不撤销历史完成数（state.passed 不动）。 */
+  function markStale() {
+    var box = $('verdict');
+    if (box && !box.hidden) {
+      if (!box.querySelector('.stale-note')) {
+        box.appendChild(el('div', '已过期，需重新运行 / 判题（旧结论仅作历史参考）。', 'muted stale-note'));
+      }
+      box.classList.add('is-stale');
+    }
+    var nb = $('next-action');
+    if (nb && !nb.hidden) nb.hidden = true;
+  }
+
+  function setRunHint(text) {
+    var node = $('run-hint');
+    if (node) node.textContent = text || '';
+  }
 
   function currentQuestion() { return currentId ? QUESTION_BY_ID[currentId] : null; }
 
@@ -340,13 +385,27 @@
   }
 
   /* 下一步：按 §5.3 优先级只显示一个主动作。 */
+  function hasUnfinishedQuestions() {
+    if (!L.sectionProgress) return false;
+    var sp = L.sectionProgress(state, SECTIONS);
+    return sp.sections.some(function (s) { return !s.completed; });
+  }
+
   function chooseNextAction(info) {
     info = info || {};
     if (info.sectionCompleted && info.goalMet) {
       return { primary: { label: '今天先到这里', run: function () { showTodayWrap(false); } }, secondary: { label: '查看下一段', run: gotoNextSection } };
     }
     if (info.sectionCompleted) {
-      return { primary: { label: '查看下一段任务', run: gotoNextSection }, secondary: null };
+      /* J（P0）末段兜底：有真实下一段就去；还有未完成题就指向真实目标；
+         全库完成则进入今日收束，绝不留指向空对象的「下一段」。 */
+      if (pendingSummary && pendingSummary.nextFirstQuestion) {
+        return { primary: { label: '查看下一段任务', run: gotoNextSection }, secondary: null };
+      }
+      if (hasUnfinishedQuestions()) {
+        return { primary: { label: '继续未完成的题', run: continueToNext }, secondary: null };
+      }
+      return { primary: { label: '今天先到这里', run: function () { showTodayWrap(false); } }, secondary: { label: '继续练', run: continueToNext } };
     }
     if (info.goalMet) {
       return { primary: { label: '今天先到这里', run: function () { showTodayWrap(false); } }, secondary: { label: '继续练', run: continueToNext } };
@@ -377,26 +436,46 @@
     var target = (p && !p.hidden && !p.disabled) ? p : ((s && !s.hidden && !s.disabled) ? s : null);
     if (!target) return false;
     try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+    /* 目标可能在 sticky 顶栏之下不可见：一次即时最小滚动（不用平滑滚动抢注意力）。 */
+    try {
+      var r = target.getBoundingClientRect();
+      var top = 64;
+      if (r.top < top || r.bottom > (window.innerHeight || 0)) target.scrollIntoView({ block: 'nearest' });
+    } catch (e) { /* 无布局信息时放弃滚动，不影响状态 */ }
     return true;
   }
 
-  /* 段末结算：独立卡片；旧用户回看只展示、不重发 XP。combined=与今日目标合并成一张结算。 */
-  function renderSectionSummary(trans, combined) {
+  /* 提交以来用户是否主动把焦点移到了别处（用于决定是否抢回焦点）。 */
+  function userMovedFocus(ev) {
+    if (!ev) return true;
+    var active = document.activeElement;
+    if (!active || active === document.body) return false;
+    if (active === ev.focusAtSubmit) return false;
+    /* 判题按钮被禁用后焦点常回到 body；textarea 是发起时焦点则仍视为未移开。 */
+    if (ev.focusAtSubmit && active === $('sql-input') && ev.focusAtSubmit === $('sql-input')) return false;
+    return true;
+  }
+
+  /* 段末结算：独立卡片；旧用户回看只展示、不重发奖励。combined=与今日目标合并成一张结算。 */
+  function renderSectionSummary(trans, combined, animate) {
     var box = $('section-summary');
     if (!box) return;
     if (!trans || !trans.completed) { pendingSummary = null; show(box, false); return; }
     pendingSummary = trans;
     $('section-summary-title').textContent = combined
       ? '第 ' + trans.section + ' 段完成 + 今日目标达成'
-      : '第 ' + trans.section + ' 段 ' + trans.total + ' 题已完成';
+      : '第 ' + trans.section + ' 段完成 · ' + trans.passed + '/' + trans.total;
     var body = '完成 ' + trans.passed + '/' + trans.total +
       '；未看完整答案完成 ' + trans.unseenAnswer + ' 题' +
       '；跟练完成 ' + trans.guided + ' 题' +
       '；待复查 ' + trans.due + ' 题。';
     if (trans.isLastSection) {
-      body = '全库首次完成 ' + trans.course.passed + '/' + trans.course.total + ' 题，待复查 ' + trans.course.due + ' 题。' +
+      var remain = Math.max(0, trans.course.total - trans.course.passed);
+      body = (trans.course.passed === trans.course.total
+        ? '120 题已完成（' + trans.course.passed + '/' + trans.course.total + ' 题），待复查 ' + trans.course.due + ' 题。'
+        : '第 ' + trans.section + ' 段完成，尚有 ' + remain + ' 题未完成。') +
         '本段完成 ' + trans.passed + '/' + trans.total + '；未看完整答案完成 ' + trans.unseenAnswer +
-        ' 题；跟练完成 ' + trans.guided + ' 题。没有下一段了，可以进入复习计划。';
+        ' 题；跟练完成 ' + trans.guided + ' 题。';
     } else if (trans.nextTitle) {
       body += ' 下一段开始练' + trans.nextTitle + '。';
     }
@@ -418,7 +497,8 @@
     /* 合并结算：今日小结折进同一张卡，不连弹两次（§5.3 第 1 条）。 */
     if (combined) due.textContent += ' ' + todayWrapText();
     show(box, true);
-    replayAnim(box, 'hr-anim-summary');
+    /* GF1-H：段通关用 hr-summary-in，替代普通通过的 hr-pop，不叠加。 */
+    if (animate !== false) replayAnim(box, 'hr-anim-summary');
     if (trans.firstShown) L.markSectionSummarySeen(state, trans.section);
   }
 
@@ -440,7 +520,7 @@
     var needs = sp.sections.reduce(function (n, s) { return n + s.needsFix; }, 0);
     return '今天完成 ' + fresh + ' 道新题、复查 ' + review +
       ' 题；待修正 ' + needs + ' 题。下次主动作：' + (nextPlanItem() ? '继续今天这一组的下一项' : '从待复查或下一段继续') + '。' +
-      '错过一天不退段、不扣 XP，下次从上次的位置继续即可。';
+      '错过一天不退段，下次从上次的位置继续即可。';
   }
 
   function showTodayWrap(celebrate) {
@@ -471,14 +551,30 @@
     }
     var bar = $('stat-bar');
     if (bar && sec) {
-      bar.style.width = (sec.questions.length ? Math.round(passedInSection(sec) / sec.questions.length * 100) : 0) + '%';
-    }
-    var xp = $('stat-xp');
-    if (xp) xp.textContent = 'XP ' + state.xp;
-    var streak = $('stat-streak');
-    if (streak) {
-      var act = (state.learning && state.learning.activity) || {};
-      streak.textContent = '连续 ' + (act.activeDays || 0) + ' 天';
+      var totalQ = sec.questions.length;
+      var doneQ = passedInSection(sec);
+      var ratio = totalQ ? doneQ / totalQ : 0;
+      var sameSec = barState.section === sec.section;
+      var prevRatio = sameSec ? barState.ratio : 0;
+      if (barAnimNext && sameSec && ratio > prevRatio) {
+        /* 同段首次完成：延迟 120ms，由旧比例演到新比例（D 的唯一动画路径）。 */
+        bar.style.transitionDelay = '120ms';
+      } else {
+        /* 切段 / 首次加载 / 非首次完成：直接设终值，不演成「凭空获得进度」。 */
+        bar.style.transitionDelay = '';
+      }
+      bar.style.transform = 'scaleX(' + ratio + ')';
+      barAnimNext = false;
+      barState = { section: sec.section, ratio: ratio };
+      var wrap = bar.parentNode;
+      if (wrap) {
+        wrap.setAttribute('role', 'progressbar');
+        wrap.setAttribute('aria-label', '第 ' + sec.section + ' 段进度');
+        wrap.setAttribute('aria-valuemin', '0');
+        wrap.setAttribute('aria-valuemax', String(totalQ));
+        wrap.setAttribute('aria-valuenow', String(doneQ));
+        wrap.setAttribute('aria-valuetext', '第 ' + sec.section + ' 段，已完成 ' + doneQ + '/' + totalQ);
+      }
     }
     var goal = $('stat-goal');
     if (goal) {
@@ -499,26 +595,10 @@
     var persist = $('record-persist');
     if (persist) {
       var memoryOnly = !!(state.learning && state.learning.persistence === 'memoryOnly');
-      if (memoryOnly) { persist.textContent = '本次进度尚未保存到浏览器（刷新可能丢失）；重试保存不会重复加分。'; show(persist, true); }
+      if (memoryOnly) { persist.textContent = '本次进度尚未保存到浏览器（刷新可能丢失）；可重试保存，已有完成记录不变。'; show(persist, true); }
       else { persist.textContent = ''; show(persist, false); }
     }
-    renderAttempts();
     renderTodayGroup();
-  }
-
-  /* 本题三次尝试：以状态机 learning.attempts 为准，不画血条、不显示生命值。 */
-  function renderAttempts() {
-    var node = $('q-attempts');
-    if (!node) return;
-    var q = currentQuestion();
-    if (!q) { node.textContent = ''; return; }
-    var a = state.learning && state.learning.attempts ? state.learning.attempts[q.id] : null;
-    if (a && a.mode === 'guided') {
-      node.textContent = '本题进入跟练模式（运行 / 改写 / 提示 / 看答案仍可用）';
-      return;
-    }
-    var left = a ? a.attemptsLeft : L.HEARTS_PER_LEVEL;
-    node.textContent = '本题独立尝试剩余 ' + left + ' 次';
   }
 
   /* ------------------------------ 左栏题号列表 ------------------------------ */
@@ -607,14 +687,18 @@
     currentId = id;
     state.current = id;
     saveProgress();
+    /* K（P0）：先交接再开下一轮——旧补全、旧快照、旧装饰全部失效，不落到新题上。 */
+    accepted = null;
+    hideSuggest();
+    setRunHint('');
     renderNav();
     renderStats();
     renderDetail();
     if (openPanel === 'rail') closePanel();
-    /* 切题后焦点回到合理位置：键盘激活时把焦点放回被选中的题行。 */
+    /* 切题后焦点回到合理位置：键盘激活时把焦点放到新题标题，再由用户自主进入编辑器。 */
     if (fromKeyboard) {
-      var li = document.querySelector('#section-nav li[data-qid="' + id + '"]');
-      if (li && li.focus) li.focus();
+      var title = $('q-title');
+      if (title) { title.setAttribute('tabindex', '-1'); try { title.focus(); } catch (e) { /* 标题不可聚焦时保持原焦点 */ } }
     }
   }
 
@@ -851,7 +935,7 @@
       btn.setAttribute('aria-expanded', 'true');
       btn.setAttribute('aria-controls', bodyId);
       btn.addEventListener('click', function () {
-        /* 只记阅读状态并落盘：不加 XP、不计今日目标、不扣尝试次数 */
+        /* 只记阅读状态并落盘：不加奖励、不计今日目标、不扣任何额度 */
         if (L && state) L.markSyntaxSeen(state, c.syntax, L.todayStamp());
         saveProgress();
         var fresh = syntaxCardNode(c, i, qid);
@@ -1143,21 +1227,31 @@
 
     show($('ref-review-block'), false);
     show($('verdict'), false);
+    var vbox = $('verdict');
+    if (vbox) vbox.classList.remove('is-stale');
     show($('result-block'), false);
     show($('answer-block'), false);
+    show($('today-wrap'), false);
     lastRun = null;
 
     var post = $('post-pass-block');
     if (state.passed[q.id]) { renderPostPass(q); show(post, true); } else { show(post, false); }
 
-    /* 段末总结：所在段已完成时可回看（旧用户回看不重发 XP，不问是否首次）。 */
+    /* 段末总结：所在段已完成时可回看（回看静态展示，不重播动画）。 */
     var transNow = L.sectionTransition(state, SECTIONS, q.id);
-    renderSectionSummary(transNow, false);
-    renderNextAction({
-      sectionCompleted: !!(transNow && transNow.completed),
-      goalMet: L.goalMet(state)
-    });
+    renderSectionSummary(transNow, false, false);
+    /* K：未通过题不显示「通过后的下一项」主按钮；已通过题才给下一步。 */
+    if (state.passed[q.id]) {
+      renderNextAction({
+        sectionCompleted: !!(transNow && transNow.completed),
+        goalMet: L.goalMet(state)
+      });
+    } else {
+      var nextBox = $('next-action');
+      if (nextBox) nextBox.hidden = true;
+    }
 
+    updateEditorStatus();
     renderStats();
   }
 
@@ -1172,7 +1266,7 @@
     if (badge) {
       var sec = SECTION_OF[q.id];
       var all = sec && sec.questions.every(function (x) { return state.passed[x.id]; });
-      if (all) { badge.textContent = '第 ' + sec.section + ' 段通关'; show(badge, true); replayAnim(badge, 'hr-anim-pop'); }
+      if (all) { badge.textContent = '第 ' + sec.section + ' 段通关'; show(badge, true); }
       else show(badge, false);
     }
   }
@@ -1308,13 +1402,65 @@
     if (wrap.childNodes.length > 1) box.appendChild(wrap);
   }
 
+  function appendBackToSql(box) {
+    var back = el('button', '回到 SQL 修改', 'btn ghost sm verdict-back');
+    back.type = 'button';
+    back.addEventListener('click', function () {
+      var ta = $('sql-input');
+      if (!ta) return;
+      ta.focus();
+      try { ta.scrollIntoView({ block: 'center' }); } catch (e) { /* 无布局信息时只聚焦 */ }
+    });
+    box.appendChild(back);
+  }
+
   function renderVerdict(kind, title, verdict, refColumns, extraNote, info) {
+    info = info || {};
     var box = $('verdict');
-    box.className = 'card-note ' + (VERDICT_MOD[kind] || 'is-warn');
+    box.className = 'card-note ' + (VERDICT_MOD[kind] || 'is-warn') + (info.stale ? ' is-stale' : '');
     box.textContent = '';
     box.appendChild(el('div', title, 'verdict-title'));
     if (extraNote) box.appendChild(el('div', extraNote, 'muted'));
-    if (verdict) {
+
+    var fmtDiff = function (d) {
+      var label = d.kind === 'extra' ? '多余行' : d.kind === 'missing' ? '缺失行' : '不一致行';
+      var cols = Array.isArray(refColumns) && refColumns.length ? ' 列：' + refColumns.join(' | ') : '';
+      return '[' + label + ']' + cols + '  ' + JSON.stringify(d.row);
+    };
+
+    /* G（P0）：失败卡顺序固定为 结论 → 首个差异证据 → 一个建议 → 回到 SQL 修改；
+       其余诊断（原因、对齐、更多差异、回看入口）折叠在最后，不同时动画化上下两块。 */
+    if (kind === 'fail' && verdict) {
+      var dtypeF = diffTypeOf(verdict, !!info.orderSensitive);
+      if (dtypeF) box.appendChild(el('div', dtypeF, 'diff-type'));
+      var diffsF = verdict.diffRows || [];
+      if (diffsF.length) box.appendChild(el('div', fmtDiff(diffsF[0]), 'diff k-' + diffsF[0].kind));
+      if (info.action) box.appendChild(el('div', info.action, 'verdict-action'));
+      appendBackToSql(box);
+      var diag = document.createElement('details');
+      diag.className = 'verdict-diag';
+      diag.appendChild(el('summary', '更多诊断与回看'));
+      if (verdict.reason) diag.appendChild(el('div', verdict.reason, 'muted'));
+      if (verdict.columnIssue) {
+        var pf = [verdict.columnIssue.message];
+        if (verdict.columnIssue.missing && verdict.columnIssue.missing.length) pf.push('缺失列：' + verdict.columnIssue.missing.join('、'));
+        if (verdict.columnIssue.extra && verdict.columnIssue.extra.length) pf.push('多余列：' + verdict.columnIssue.extra.join('、'));
+        diag.appendChild(el('div', pf.join(' '), 'muted'));
+      }
+      if (verdict.refRowCount == null) diag.appendChild(el('div', '预期行数 —（SQL 未跑通，未计算）', 'muted'));
+      else diag.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
+        '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'muted'));
+      if (diffsF.length > 1) {
+        var detF = document.createElement('details');
+        detF.className = 'diff diff-more';
+        detF.appendChild(el('summary', '展开更多差异（其余 ' + (diffsF.length - 1) + ' 条）'));
+        diffsF.slice(1).forEach(function (d) { detF.appendChild(el('div', fmtDiff(d), 'k-' + d.kind)); });
+        diag.appendChild(detF);
+      }
+      if (info.reviewTools && currentQuestion()) attachReviewTools(diag, currentQuestion());
+      if (info.reviewNote) diag.appendChild(el('div', info.reviewNote, 'muted'));
+      box.appendChild(diag);
+    } else if (verdict) {
       box.appendChild(el('div', verdict.reason, 'muted'));
       if (verdict.columnIssue) {
         var p = [verdict.columnIssue.message];
@@ -1328,44 +1474,44 @@
         box.appendChild(el('div', '对齐方式 alignMode=' + verdict.alignMode +
           '；你的行数 ' + verdict.userRowCount + '，预期行数 ' + verdict.refRowCount, 'muted'));
       }
-      var dtype = diffTypeOf(verdict, !!(info && info.orderSensitive));
+      var dtype = diffTypeOf(verdict, !!info.orderSensitive);
       if (dtype) box.appendChild(el('div', dtype, 'diff-type'));
       var diffs = verdict.diffRows || [];
       if (diffs.length) {
-        var fmt = function (d) {
-          var label = d.kind === 'extra' ? '多余行' : d.kind === 'missing' ? '缺失行' : '不一致行';
-          var cols = Array.isArray(refColumns) && refColumns.length ? ' 列：' + refColumns.join(' | ') : '';
-          return '[' + label + ']' + cols + '  ' + JSON.stringify(d.row);
-        };
-        /* 只展示首个主要证据，其余默认折叠。 */
-        box.appendChild(el('div', fmt(diffs[0]), 'diff k-' + diffs[0].kind));
+        box.appendChild(el('div', fmtDiff(diffs[0]), 'diff k-' + diffs[0].kind));
         if (diffs.length > 1) {
           var det = document.createElement('details');
           det.className = 'diff diff-more';
-          var sm = document.createElement('summary');
-          sm.textContent = '展开更多差异（其余 ' + (diffs.length - 1) + ' 条）';
-          det.appendChild(sm);
-          diffs.slice(1).forEach(function (d) { det.appendChild(el('div', fmt(d), 'k-' + d.kind)); });
+          det.appendChild(el('summary', '展开更多差异（其余 ' + (diffs.length - 1) + ' 条）'));
+          diffs.slice(1).forEach(function (d) { det.appendChild(el('div', fmtDiff(d), 'k-' + d.kind)); });
           box.appendChild(det);
         }
       }
+      if (info.action) box.appendChild(el('div', info.action, 'verdict-action'));
+      if (info.reviewTools && currentQuestion()) attachReviewTools(box, currentQuestion());
+      if (info.reviewNote) box.appendChild(el('div', info.reviewNote, 'muted'));
+    } else if (info.action) {
+      box.appendChild(el('div', info.action, 'verdict-action'));
     }
-    if (info && info.action) box.appendChild(el('div', info.action, 'verdict-action'));
-    if (info && info.reviewTools && currentQuestion()) attachReviewTools(box, currentQuestion());
-    if (info && info.reviewNote) box.appendChild(el('div', info.reviewNote, 'muted'));
+    if (info.stale) box.appendChild(el('div', '已过期，需重新运行 / 判题（旧结论仅作历史参考）。', 'muted stale-note'));
     show(box, true);
-    replayAnim(box, 'hr-anim-fade-up');
-    if (kind === 'fail') replayAnim($('sql-input'), 'hr-anim-shake');
+    /* GF1-G：失败不再 shake 编辑器。GF1-H：通过用 hr-pop（240ms、无回弹）。过期结论不播装饰动画。 */
+    /* 段通关用 hr-summary-in 替换普通通过的 hr-pop，不叠加。 */
+    if (!info.stale && !(kind === 'pass' && info.sectionCompleted)) {
+      replayAnim(box, kind === 'pass' ? 'hr-anim-pop' : 'hr-anim-fade-up');
+    }
   }
 
-  function renderRunError(msg) {
+  function renderRunError(msg, sql) {
     show($('result-block'), false);
-    /* 语句级预检优先：漏 FROM 时引擎先抛 no such column，只翻译报错文本会把学员引去核列名。 */
-    var sql = ($('sql-input') && $('sql-input').value) || '';
+    /* 语句级预检优先：漏 FROM 时引擎先抛 no such column，只翻译报错文本会把学员引去核列名。
+       用受理时的 SQL 快照，不读当前草稿（可能已改）。 */
+    if (sql === undefined) sql = ($('sql-input') && $('sql-input').value) || '';
     var triage = sqlTriage(sql);
     renderVerdict('fail', 'SQL 执行错误（原样展示）：', {
       reason: msg, columnIssue: null, diffRows: [], alignMode: 'none', userRowCount: null, refRowCount: null
     }, null, '人话：' + (triage ? triage : explainError(msg)));
+    announce('SQL 执行错误（原样展示）：' + msg);
   }
 
   /* ------------------------------ 数据库 / 参考结果 ------------------------------ */
@@ -1415,38 +1561,48 @@
 
   var running = false;
 
-  /* 实际执行抽出来：忙态已就位后再跑，结束时由 doRun 统一恢复按钮。 */
-  function runNow() {
-    var q = currentQuestion();
-    var sql = $('sql-input').value;
+  /* 实际执行抽出来：忙态已就位后再跑，结束时由 doRun 统一恢复按钮。
+     只报「跑出了什么」（行数/列数/错误），绝不冒充通过，也不写判定。 */
+  function runNow(ev, sql, qid) {
     var res;
     try {
       res = window.HRDb.runQuery(db, sql);
     } catch (e) {
-      renderRunError(String(e && e.message ? e.message : e));
+      if (qid === currentId) renderRunError(String(e && e.message ? e.message : e), sql);
       return;
     }
-    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
+    if (qid !== currentId) return;   /* 已切题：旧事件不写新题内容 */
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated, qid: qid, sql: sql };
     show($('result-block'), true);
     showResultTab('mine');
-    if (q) { state.sql[q.id] = sql; saveProgress(); }
+    setRunHint('已运行：' + res.rows.length + ' 行、' + res.columns.length + ' 列；尚未判题');
   }
 
   function doRun() {
     if (running || judging) return;
     if (!requireDb()) return;
-    if (!$('sql-input').value.trim()) { renderVerdict('warn', '请先写 SQL。', null, null); return; }
+    var sqlInput = $('sql-input');
+    var sql = sqlInput.value;
+    if (!sql.trim()) { renderVerdict('warn', '请先写 SQL。', null, null); sqlInput.focus(); return; }
+    /* E：受理时固定题号 + SQL 快照 + 递增事件号。 */
+    var qid = currentId;
+    var ev = { qid: qid, sql: sql, event: ++eventSeq, kind: 'run', stale: false, focusAtSubmit: document.activeElement };
+    accepted = ev;
     running = true;
     setBusy($('btn-run'), true, '运行中…');
     setBusy($('btn-judge'), true);   /* 运行期间判题同样禁用，只禁用不改文案 */
+    /* 运行不产生判定：旧结论降为历史，但历史完成数不撤销。 */
+    markStale();
+    updateEditorStatus();
     /* 先让浏览器重绘出忙态，再执行同步查询。 */
     setTimeout(function () {
-      try { runNow(); }
-      catch (e) { renderRunError(String(e && e.message ? e.message : e)); }
+      try { runNow(ev, sql, qid); }
+      catch (e) { if (qid === currentId) renderRunError(String(e && e.message ? e.message : e), sql); }
       finally {
         running = false;
         setBusy($('btn-run'), false);
         setBusy($('btn-judge'), false);
+        if (qid === currentId) updateEditorStatus();
       }
     }, 0);
   }
@@ -1459,38 +1615,48 @@
 
   function doJudge() {
     if (judging || running) return;
-    judging = true;
-    /* 判题快照：发起时记下题号，异步回来若已切题就丢弃，不渲染到新题上。 */
+    var sqlInput = $('sql-input');
+    var sql = sqlInput.value;
+    if (!sql.trim()) { renderVerdict('warn', '请先写 SQL 再判题。', null, null); sqlInput.focus(); return; }
+    /* F：受理 → 计算 → 结论只有一个状态源；受理时固定题号 + SQL 快照 + 事件号。 */
     var qid = currentId;
+    var ev = { qid: qid, sql: sql, event: ++eventSeq, kind: 'judge', stale: false, focusAtSubmit: document.activeElement };
+    accepted = ev;
+    judging = true;
     setJudgeLoading(true);
     setTimeout(function () {
       try {
         if (qid !== currentId) return;
-        judgeNow(qid);
+        judgeNow(qid, ev);
       }
       catch (err) {
-        if (qid === currentId) renderRunError(String(err && err.message ? err.message : err));
+        if (qid === currentId) renderRunError(String(err && err.message ? err.message : err), sql);
       }
-      finally { judging = false; setJudgeLoading(false); }
+      finally { judging = false; setJudgeLoading(false); if (qid === currentId) updateEditorStatus(); }
     }, 0);
   }
 
-  function judgeNow(qid) {
+  function judgeNow(qid, ev) {
     if (!requireDb()) return;
     qid = qid || currentId;
     if (qid !== currentId) return;
     var q = QUESTION_BY_ID[qid];
     if (!q) return;
-    var sql = $('sql-input').value;
+    ev = ev || accepted;
+    var sql = (ev && ev.sql != null) ? ev.sql : $('sql-input').value;
     var stamp = L.todayStamp();
     if (!sql.trim()) { renderVerdict('warn', '请先写 SQL 再判题。', null, null); return; }
+    /* 提交后又被编辑：草稿保留，结论只能标为「提交版本的历史结果」，不对当前草稿庆祝。 */
+    var edited = !!(ev && $('sql-input') && $('sql-input').value !== sql);
+    var hintAnnounced = false;
+    if (ev && edited) ev.stale = true;
 
     var ref = referenceResult(q);
     if (!ref.ok) {
       /* 题库异常：不记用户失败、不消耗次数，允许换题。 */
       $('ref-review-block').textContent = '题库待复核：参考 SQL（reference_sql_sqlite）在当前库上执行失败——' + ref.error + '。本题不判你的对错、不消耗次数。';
       show($('ref-review-block'), true);
-      renderVerdict('warn', '本题标记「题库待复核」，跳过判题；你仍可换题继续。', null, null);
+      renderVerdict('warn', '本题标记「题库待复核」，跳过判题；你仍可换题继续。', null, null, null, { stale: edited });
       return;
     }
     show($('ref-review-block'), false);
@@ -1503,7 +1669,7 @@
       L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: false, execOk: false, stamp: stamp });
       saveProgress();
       if (qid !== currentId) return;
-      renderRunError(String(e && e.message ? e.message : e));
+      renderRunError(String(e && e.message ? e.message : e), sql);
       renderStats();
       return;
     }
@@ -1515,7 +1681,7 @@
       { orderSensitive: orderSensitive }
     );
 
-    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated };
+    lastRun = { columns: res.columns, rows: res.rows, truncated: !!res.truncated, qid: qid, sql: sql };
     show($('result-block'), true);
     showResultTab('mine');
 
@@ -1523,11 +1689,9 @@
       $('ref-review-block').textContent = '题库待复核：参考 SQL 实跑 ' + ref.result.rows.length +
         ' 行，与 expected.row_count=' + ref.expectedRowCount + ' 不一致。本题不判你的对错、不消耗次数（下方结论仅供参考）。';
       show($('ref-review-block'), true);
-      renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns, null, { orderSensitive: orderSensitive });
+      renderVerdict('warn', '本题标记「题库待复核」。', verdict, ref.result.columns, null, { orderSensitive: orderSensitive, stale: edited });
       return;
     }
-
-    state.sql[q.id] = sql;
 
     if (verdict.pass) {
       /* 唯一计分入口：recordLearningAttempt 判 + creditLearningEvent 结算。 */
@@ -1539,22 +1703,34 @@
       var sectionCompleted = !!(trans && trans.completed);
       var combined = sectionCompleted && !!credit.goalMet;
       lastCombined = combined ? { section: trans.section } : null;
-      renderSectionSummary(trans, combined);
+      var firstDone = !!fb.firstTime && !fb.duplicate && !edited;
+      renderSectionSummary(trans, combined, !edited);
       var justCelebrated = !!credit.goalCelebrated && !prevCelebrated;
-      if (credit.goalMet && !combined) showTodayWrap(justCelebrated);
+      if (credit.goalMet && !combined) showTodayWrap(justCelebrated && !edited);
       else if (!credit.goalMet) show($('today-wrap'), false);
-      renderNextAction({ sectionCompleted: sectionCompleted, goalMet: !!credit.goalMet });
+      if (edited) { var nb = $('next-action'); if (nb) nb.hidden = true; }
+      else renderNextAction({ sectionCompleted: sectionCompleted, goalMet: !!credit.goalMet });
       renderPostPass(q);
       show($('post-pass-block'), true);
+      /* H：区分本次首次完成 / 重复提交 / 回看，文案不含任何奖励措辞。 */
       var title, passNote;
-      if (fb.duplicate) { title = '通过 —— 与上次判题相同'; passNote = '未重复计数，不重复加 XP。'; }
-      else if (fb.firstTime) { title = '通过 —— 首次完成'; passNote = '首次完成 +' + credit.xpGained + ' XP。'; }
-      else if (fb.reviewResolved) { title = '通过 —— 复查完成'; passNote = '复查完成，不重复加 XP；这题移出待复查列表。'; }
-      else { title = '通过 —— 不重复加 XP'; passNote = '结果与预期一致。'; }
-      if (fb.completionType === 'guided') passNote += ' 本次按跟练完成记录。';
+      if (fb.duplicate) { title = '通过 · 与上次结果一致'; passNote = '重复提交，完成题数未变化。'; }
+      else if (firstDone) {
+        title = '通过 · 首次完成';
+        passNote = '结果集与预期一致。第 ' + (trans ? trans.section : '?') + ' 段已完成 ' +
+          (trans ? trans.passed : '?') + '/' + (trans ? trans.total : '?') + '。';
+      }
+      else if (fb.reviewResolved) { title = '通过 · 复查完成'; passNote = '本次复查已通过，这题移出待复查列表。'; }
+      else { title = '通过 · 改写通过'; passNote = '结果与预期一致；本题此前已完成，完成题数未变化。'; }
+      if (fb.completionType === 'guided') passNote += ' 本次为跟练完成；已安排复查。';
+      if (edited) passNote += '（提交后已修改，本结论为提交版本的历史结果，需重新判题。）';
+      /* 只有同段首次完成才把进度条按 120ms 延迟演到新比例。 */
+      barAnimNext = firstDone;
       renderVerdict('pass', title, verdict, ref.result.columns, passNote, {
         action: null,
-        orderSensitive: orderSensitive
+        orderSensitive: orderSensitive,
+        sectionCompleted: sectionCompleted,
+        stale: edited
       });
     } else {
       var fb2 = L.recordLearningAttempt(state, { id: q.id, kind: 'check', sql: sql, ok: false, stamp: stamp });
@@ -1565,30 +1741,36 @@
         state.hintSeen[q.id] = before + 1;
         saveProgress();
         announce('已展开提示 ' + state.hintSeen[q.id] + '/' + list.length + '：' + list[state.hintSeen[q.id] - 1]);
+        hintAnnounced = true;
       }
       renderHints(q);
-      var left = (typeof fb2.attemptsLeft === 'number') ? fb2.attemptsLeft : 0;
-      var wrongNo = 3 - left;
+      var wrongNo = (typeof fb2.wrongNo === 'number') ? fb2.wrongNo : 0;
       var reviewNote = '';
-      if (fb2.duplicate) reviewNote = '与上次判题相同，未重复扣次数。';
-      else if (fb2.skipped) reviewNote = '这一步不算有效结果判错，未消耗次数。';
+      if (fb2.duplicate) reviewNote = '与上次判题相同，未重复累计判错。';
+      else if (fb2.skipped) reviewNote = '这一步不算有效结果判错。';
       else if (wrongNo === 1) reviewNote = '第 1 次判错：已记录待修正，并展开第 1 条提示。';
       else if (wrongNo === 2) {
         reviewNote = '第 2 次判错：建议回看本题语法卡与易错点。';
         if (list.length <= 1) reviewNote += ' 本题只有这条提示——不另造第二条，回看入口见下方。';
       } else if (wrongNo >= 3) {
-        reviewNote = '已经试了 3 次，换个思路：对照提示拆开检查。运行、改写、提示、看答案仍可用，这题可以暂停、留作待修正。';
+        reviewNote = '已经试了 ' + wrongNo + ' 次，换个思路：对照提示拆开检查。运行、改写、提示、看答案仍可用，这题可以暂停、留作待修正。';
       }
-      renderVerdict('fail', '未通过 —— 结果与预期不一致，已记录待修正；练习不扣分。', verdict, ref.result.columns, null, {
+      renderVerdict('fail', '未通过 · 结果与预期不符，已记录待修正；练习不扣分、不扣次数。', verdict, ref.result.columns, null, {
         action: firstActionHint(q, verdict),
         orderSensitive: orderSensitive,
-        reviewTools: wrongNo === 2 || wrongNo >= 3,
-        reviewNote: reviewNote
+        reviewTools: wrongNo >= 2,
+        reviewNote: reviewNote,
+        stale: edited
       });
     }
     renderStats();
     renderNav();
-    if (verdict.pass) focusNextAction();
+    var handed = false;
+    if (verdict.pass && !edited && !userMovedFocus(ev)) handed = focusNextAction();
+    /* 单次最终结论播报：焦点已交接就不再向 live 区写同一句，避免同一事件双播报。 */
+    if (!handed && !hintAnnounced) {
+      announce(verdict.pass ? '通过：结果与预期一致。' : '未通过：结果与预期不符，可按建议修改后重新判题。');
+    }
   }
 
   function doAnswer() {
@@ -1613,7 +1795,6 @@
       '已记录本次看了完整答案，通过后将按跟练完成记录，并预约次日复查。';
     show($('answer-block'), true);
     announce('已展开参考答案，本次作答记为跟练。');
-    renderAttempts();
   }
 
   /* ------------------------------ 编辑器字段补全 ------------------------------ */
@@ -1916,9 +2097,17 @@
 
   function onSqlEdit() {
     var q = currentQuestion();
-    if (q) { state.sql[q.id] = $('sql-input').value; saveProgress(); }
+    var value = $('sql-input').value;
+    if (q) { state.sql[q.id] = value; saveProgress(); }
+    /* D：本次提交后又改动 SQL —— 旧结果/旧判定明确标为过期，旧装饰回调失效；
+       草稿照常保存，历史完成数（state.passed）不撤销。 */
+    if (accepted && accepted.qid === currentId && value !== accepted.sql) {
+      accepted.stale = true;
+      markStale();
+    }
     checkForbidden();
     updateSuggest();
+    updateEditorStatus();
   }
 
   /* ------------------------------ 启动 ------------------------------ */

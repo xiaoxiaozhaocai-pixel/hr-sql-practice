@@ -39,6 +39,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: var(--r); border: 1px solid transparent;
   font-size: 14px; line-height: 1; padding: 8px 16px;
   background: var(--panel); color: var(--ink);
+  transition: transform 80ms ease-out;
 }
 .btn.sm { font-size: 12px; padding: 8px; }
 .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
@@ -74,7 +75,7 @@ button { font: inherit; cursor: pointer; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .progress-text { font-size: 12px; color: var(--ink-2); }
 .bar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 220ms ease-out; }
+.bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left center; transform: scaleX(0); transition: transform 220ms cubic-bezier(.2,0,0,1); }
 .stat { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .stat-hearts { color: var(--accent); letter-spacing: 1px; }
 .stat-goal.is-met { color: var(--ok); font-weight: 600; }
@@ -207,7 +208,7 @@ button { font: inherit; cursor: pointer; }
 .q-syntax[hidden] { display: none; }
 .q-syntax .syntax-card { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--neutral-tint); }
 .q-syntax .syntax-name { font-weight: 600; color: var(--ink); margin-bottom: 6px; }
-.q-syntax .syntax-row { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+.q-syntax .syntax-row { font-size: 14px; line-height: 1.6; color: var(--ink-2); }
 .q-syntax .syntax-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); white-space: pre-wrap; }
 .q-syntax .syntax-body[hidden] { display: none; }
 .q-syntax .syntax-actions { margin-top: 8px; }
@@ -228,6 +229,7 @@ button { font: inherit; cursor: pointer; }
 .editor .bar2 { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--dark); }
 .editor .bar2 b { font-size: 12px; font-weight: 500; color: var(--editor-dim); letter-spacing: .3px; }
 .editor .bar2 .kbd { margin-left: auto; font-size: 12px; color: var(--editor-dim); }
+.editor .bar2 .editor-status { font-size: 12px; color: var(--editor-dim); }
 textarea#sql-input {
   display: block; width: 100%; min-height: 260px; margin: 0; padding: 16px;
   border: 0; outline: 0; resize: vertical;
@@ -335,7 +337,7 @@ pre {
   position: sticky; top: 56px; z-index: 29; padding: 8px 16px;
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.record-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.record-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .record-head b { margin-right: auto; }
 .record-grid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
 .record-panel .muted { margin-top: 8px; font-size: 12px; }
@@ -352,31 +354,39 @@ pre {
 /* 差异摘要 / 唯一动作 / 回看入口 */
 .diff-type { margin-top: 8px; font-weight: 600; }
 .verdict-action { margin-top: 8px; }
+/* GF1-G/D：失败卡唯一修正动作 + 折叠诊断；过期结论标注 */
+.verdict-back { margin-top: 8px; }
+.verdict-diag { margin-top: 8px; }
+.verdict-diag > summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.card-note.is-stale { opacity: .92; }
+.stale-note { font-weight: 600; }
 .diff-more > summary { cursor: pointer; color: var(--accent); font-size: 12px; }
 .review-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .review-tools summary { cursor: pointer; color: var(--accent); font-size: 12px; }
 .review-tools ul { margin: 8px 0 0; padding-left: 20px; }
 
-/* ---------------------------- 反馈层：轻量动效（Q3） ----------------------------
- * 只动 opacity / transform，时长一律 160–260ms；进度条宽度走 transition，不跑 JS 定时器。
- * 全部由下方 @media (prefers-reduced-motion: reduce) 的 * 规则统一关停（动画即时结束）。
- * 共 4 个 keyframes + 1 条宽度过渡。
+/* ---------------------------- 反馈层：轻量动效（GF1 P0 收敛） ----------------------------
+ * 只剩 3 个关键帧（hr-fade-up / hr-pop / hr-summary-in）+ 2 个过渡（进度 scaleX 220ms、按钮按压 80ms）。
+ * 只动 opacity / transform；无 width/height/top/left/颜色/阴影/滤镜动画，
+ * 无无限循环、无逐行瀑布、无滚动数字；不永久设置 will-change。
  */
-@keyframes hr-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes hr-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
-@keyframes hr-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
-@keyframes hr-summary-in { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
-.hr-anim-fade-up { animation: hr-fade-up 220ms ease-out; }
-.hr-anim-pop { animation: hr-pop 240ms cubic-bezier(.2,.8,.3,1.1); }
-.hr-anim-shake { animation: hr-shake 260ms ease-in-out; }
-.hr-anim-summary { animation: hr-summary-in 240ms ease-out; }
+@keyframes hr-fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes hr-pop { from { opacity: .8; transform: scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes hr-summary-in { from { opacity: .8; transform: scale(.985); } to { opacity: 1; transform: none; } }
+.hr-anim-fade-up { animation: hr-fade-up 160ms cubic-bezier(.2,0,0,1); }
+.hr-anim-pop { animation: hr-pop 240ms cubic-bezier(.2,0,0,1); }
+.hr-anim-summary { animation: hr-summary-in 240ms cubic-bezier(.2,0,0,1); }
+/* 结果行淡入沿用 A，但用 220ms；只作用于前 20 行（渲染层封顶）。 */
+#result-table tbody tr.hr-anim-fade-up { animation-duration: 220ms; }
 
-/* 减弱动画：不是放慢，是把过渡 / 动画整体关掉 */
+/* 减弱动画：不是放慢，是把过渡 / 动画连同延迟整体关掉，transform 直接到终值 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0.001ms !important;
     scroll-behavior: auto !important;
   }
 }
@@ -384,11 +394,11 @@ pre {
 /* ---------------------------- 今日小组 / 段末总结 / 下一步 ---------------------------- */
 .today-card { margin-bottom: 12px; }
 .today-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.today-summary { margin: 6px 0 8px; font-size: 13px; }
+.today-summary { margin: 6px 0 8px; font-size: 14px; }
 .today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .today-list li {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
 }
 .today-list li.on { border-color: var(--accent); }
 .today-list li.done { opacity: 0.72; }
@@ -424,7 +434,7 @@ pre {
 .qa-panel .qa-results { display: flex; flex-direction: column; gap: 8px; }
 .qa-panel .qa-answer {
   border-left: 3px solid var(--line); background: var(--neutral-tint);
-  border-radius: 4px; padding: 8px 12px; font-size: 13px; line-height: 1.6;
+  border-radius: 4px; padding: 8px 12px; font-size: 14px; line-height: 1.6;
 }
 .qa-panel .qa-answer.is-hit { border-left-color: var(--ok); }
 .qa-panel .qa-answer.is-miss { border-left-color: var(--warn); }
@@ -447,4 +457,14 @@ pre {
   .qhead { flex-wrap: wrap; gap: 8px 12px; }
   .qhead h3 { flex: 1 1 100%; }
   .qhead .chip { margin-left: 0; }
+}
+
+/* GF1-12（主人已批准）：视口 <640px 时主列允许随视口收缩；表格内部横向滚动，
+   运行 / 判题按钮已 flex-wrap，无需横向滚动即可点到。 */
+@media (max-width: 640px) {
+  .layout { display: block; padding: 8px; }
+  .detail { min-width: 0; }
+  .card { padding: 8px; }
+  .tablewrap { overflow-x: auto; }
+  .actions .hint { margin-left: 0; flex: 1 1 100%; }
 }

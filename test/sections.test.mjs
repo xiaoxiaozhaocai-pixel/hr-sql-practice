@@ -141,9 +141,10 @@ test('render_layer_wires_today_group_and_section_summary', () => {
   assert.match(html, /id="btn-reinit"/, '数据库初始化失败要提供重新初始化');
 });
 
-test('attempt_caption_uses_local_attempts_not_global_hearts', () => {
+test('attempt_caption_and_heart_penalty_are_removed', () => {
   const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-  assert.match(app, /本题独立尝试剩余/, '尝试次数用 §4.4 的本题口径');
+  /* GF1-A：剩余尝试次数文案与耗尽转跟练的惩罚感必须下线 */
+  assert.doesNotMatch(app, /本题独立尝试剩余|剩余 \d+ 次|耗尽转/, '剩余尝试次数文案必须下线');
   assert.doesNotMatch(app, /红心|等待回血|扣血|用尽/, '界面文案不得出现全局资源焦虑表达');
   assert.doesNotMatch(app, /window\.confirm|window\.alert|window\.prompt/, '不得使用浏览器确认弹窗');
 });
@@ -182,8 +183,8 @@ function extractFn(src, name) {
 const KEYFRAMES = [...CSS.matchAll(/@keyframes\s+([\w-]+)\s*\{([^\n]*)\}/g)];
 
 test('feedback_animation_budget_durations_and_properties_stay_within_limits', () => {
-  assert.ok(KEYFRAMES.length >= 3 && KEYFRAMES.length <= 5,
-    `反馈层 keyframes 数量应在 3..5，实际 ${KEYFRAMES.length}`);
+  /* GF1-10：最终只保留 3 个关键帧 + 2 个过渡（进度 scaleX、按钮按压）。 */
+  assert.equal(KEYFRAMES.length, 3, `反馈层必须只有 3 个 keyframes，实际 ${KEYFRAMES.length}`);
   const anims = [...CSS.matchAll(/\.(hr-anim-[\w-]+)\s*\{[^}]*animation:\s*([\w-]+)\s+(\d+)ms/g)];
   assert.equal(anims.length, KEYFRAMES.length, '每个 keyframe 都应有且仅有一条 hr-anim-* 规则引用');
   const referenced = new Set();
@@ -198,11 +199,20 @@ test('feedback_animation_budget_durations_and_properties_stay_within_limits', ()
     assert.ok(props.length > 0, `${name} 不应是空 keyframe`);
     for (const p of props) assert.ok(p === 'opacity' || p === 'transform', `${name} 动了 ${p}，只允许 opacity / transform`);
   }
-  /* 宽度类动效走 transition，不新增 keyframe；keyframes + 宽度过渡合计 ≤ 5 */
-  const w = CSS.match(/\.bar i \{[^}]*transition:\s*width\s+(\d+)ms/);
-  assert.ok(w, '进度条宽度必须用 transition 平滑填充');
-  assert.ok(Number(w[1]) >= 160 && Number(w[1]) <= 260, `进度条宽度过渡 ${w[1]}ms 必须落在 160–260ms`);
-  assert.ok(KEYFRAMES.length + 1 <= 5, 'keyframes + 宽度过渡合计不得超过 5 个动效');
+  /* GF1-I：进度条改为 transform:scaleX（左侧原点、i 满宽）+ 220ms 过渡，不再有 width 过渡 */
+  const w = CSS.match(/\.bar i \{[^}]*transition:\s*transform\s+(\d+)ms/);
+  assert.ok(w, '进度条必须用 transform:scaleX 的 transition');
+  assert.match(CSS, /\.bar i \{[^}]*transform-origin:\s*left/, '进度条必须左侧原点');
+  assert.match(CSS, /\.bar i \{[^}]*width:\s*100%/, '进度条 i 固定满宽');
+  assert.ok(Number(w[1]) >= 160 && Number(w[1]) <= 260, `进度条过渡 ${w[1]}ms 必须落在 160–260ms`);
+  assert.doesNotMatch(CSS, /transition:\s*width/, '不得再有 width 过渡');
+  assert.ok(KEYFRAMES.length + 1 <= 5, 'keyframes + 进度过渡合计不得超过 5 个动效');
+  /* 按钮按压是第 2 个（也是唯一并列的）过渡 */
+  assert.match(CSS, /\.btn \{[^}]*transition:\s*transform\s+80ms\s+ease-out/, '按钮按压必须是 translateY 的 80ms 过渡');
+  /* 只动 opacity / transform，不永久设置 will-change */
+  assert.doesNotMatch(CSS, /will-change\s*:/, '不得永久设置 will-change');
+  assert.doesNotMatch(CSS, /@keyframes\s+hr-shake/, 'hr-shake 必须下线');
+  assert.doesNotMatch(CSS, /infinite/, '不得有无限循环动画');
 });
 
 test('feedback_animations_are_disabled_by_reduced_motion', () => {
@@ -217,8 +227,11 @@ test('feedback_js_animation_classes_are_all_defined_in_css', () => {
   const used = new Set([...APP.matchAll(/'(hr-anim-[\w-]+)'/g)].map((m) => m[1]));
   assert.ok(used.size >= 3, `app.js 应至少使用 3 个动效类，实际 ${used.size}`);
   for (const cls of used) assert.match(CSS, new RegExp('\\.' + cls + '\\s*\\{'), `CSS 缺少 .${cls} 规则`);
-  /* 通过 / 失败两条路径都要有反馈：verdict 淡入，失败额外抖编辑器 */
-  assert.match(APP, /replayAnim\(box, 'hr-anim-fade-up'\)[\s\S]*?replayAnim\(\$\('sql-input'\), 'hr-anim-shake'\)/);
+  /* GF1-G/H：失败不再抖编辑器；通过用 hr-pop（240ms、无回弹），其余用 hr-fade-up。 */
+  assert.doesNotMatch(APP, /hr-anim-shake/, '失败不得再抖编辑器');
+  assert.match(APP, /replayAnim\(box, kind === 'pass' \? 'hr-anim-pop' : 'hr-anim-fade-up'\)/,
+    '通过走 hr-pop、其余走 hr-fade-up');
+  assert.equal(used.has('hr-anim-summary'), true, '段通关必须用 hr-summary-in');
 });
 
 test('result_row_animation_is_capped_and_timer_free', () => {
@@ -326,5 +339,78 @@ test('feedback_layer_adds_no_emoji_and_keeps_record_metrics_out_of_topbar', () =
   const topbar = html.slice(html.indexOf('class="topbar"'), html.indexOf('id="record-panel"'));
   assert.ok(topbar.length > 0, '必须先定位到顶栏段');
   assert.doesNotMatch(topbar, /stat-xp|stat-streak|stat-goal/, 'XP / 连续 / 今日目标不得搬回顶栏');
-  assert.match(html, /id="record-panel"[\s\S]*id="stat-xp"/, 'XP 仍留在学习记录面板内');
+  /* GF1-A：XP / 连续天数 / 剩余尝试次数在全部界面（含学习记录面板）下线。 */
+  assert.doesNotMatch(html, /stat-xp|stat-streak/, 'XP / 连续天数不得再出现在任何界面');
+  assert.doesNotMatch(html, /q-attempts|level-hearts/, '剩余尝试次数入口必须删除');
+  assert.doesNotMatch(APP, /renderAttempts|独立尝试剩余/, 'app.js 不得再渲染剩余尝试次数');
+});
+
+/* ---------------------------- GF1 P0：A/D/E/F/G/H/I/J 关键行为 ---------------------------- */
+
+test('GF1-D_stale_snapshot_invalidates_old_verdict_without_undoing_progress', () => {
+  assert.match(APP, /accepted = ev;/, '运行/判题必须登记受理快照');
+  assert.match(APP, /event: \+\+eventSeq/, '每次操作必须有递增事件标识');
+  assert.match(APP, /value !== accepted\.sql/, '编辑后必须与快照比对判定过期');
+  assert.match(APP, /accepted\.stale = true/, '编辑后旧快照必须标为过期');
+  assert.match(APP, /'已过期，需重新运行 \/ 判题/, '旧结果必须显式标为已过期');
+  const fn = extractFn(APP, 'markStale');
+  assert.ok(fn, 'markStale 必须存在');
+  assert.doesNotMatch(fn, /state\.passed|delete |saveProgress/, '过期标记不得撤销历史完成数');
+});
+
+test('GF1-E_run_reports_only_what_it_ran_and_never_passes', () => {
+  const fn = extractFn(APP, 'runNow');
+  assert.ok(fn, 'runNow 必须存在');
+  assert.match(fn, /已运行：/, '运行成功必须报行数/列数');
+  assert.match(fn, /尚未判题/, '运行必须明确尚未判题');
+  assert.doesNotMatch(fn, /renderVerdict/, '运行不得写任何判定');
+  assert.doesNotMatch(fn, /行集不一致/, '运行不得兜底成结果判定');
+  assert.match(APP, /function doRun\(\)[\s\S]*?accepted = ev;[\s\S]*?setBusy\(\$\('btn-run'\), true, '运行中…'\)/);
+  assert.match(APP, /function doJudge\(\)[\s\S]*?accepted = ev;[\s\S]*?setJudgeLoading\(true\)/);
+});
+
+test('GF1-F_four_verdict_kinds_are_distinguishable_and_single_sourced', () => {
+  assert.match(APP, /'SQL 执行错误/, '必须有「SQL 执行错误」结论');
+  assert.match(APP, /'通过 · 首次完成'/, '必须有「通过」结论');
+  assert.match(APP, /'未通过 · 结果与预期不符/, '必须有「未通过」结论');
+  assert.match(APP, /'本题标记「题库待复核」/, '必须有「题库待复核」结论');
+  const passBlock = APP.slice(APP.indexOf('if (verdict.pass) {'), APP.indexOf('} else {\n      var fb2'));
+  assert.ok(passBlock.length > 0, '必须定位到通过分支');
+  assert.doesNotMatch(passBlock, /行集不一致|未通过/, '通过分支不得出现失败结论');
+  assert.doesNotMatch(passBlock, /XP/, '通过文案不得出现 XP');
+});
+
+test('GF1-G_fail_card_orders_evidence_before_action_and_drops_shake', () => {
+  const fn = extractFn(APP, 'renderVerdict');
+  assert.ok(fn, 'renderVerdict 必须存在');
+  const iEvidence = fn.indexOf('diffsF[0]');
+  const iAction = fn.indexOf('info.action');
+  const iBack = fn.indexOf('appendBackToSql(box)');
+  assert.ok(iEvidence > -1 && iAction > -1 && iBack > -1, '失败卡必须有证据 / 建议 / 回到 SQL');
+  assert.ok(iEvidence < iAction && iAction < iBack, '顺序必须是 证据 → 建议 → 回到 SQL 修改');
+  assert.match(APP, /'回到 SQL 修改'/);
+});
+
+test('GF1-H_pass_title_is_0ms_without_reward_wording', () => {
+  assert.match(APP, /通过 · 首次完成/, '首次完成标题');
+  assert.match(APP, /barAnimNext = firstDone/, '仅首次完成触发进度演化');
+  assert.doesNotMatch(APP, /credit\.xpGained|XP/, '判题文案不得再出现 XP / 加分');
+  assert.match(APP, /replayAnim\(box, kind === 'pass' \? 'hr-anim-pop' : 'hr-anim-fade-up'\)/);
+  assert.match(APP, /kind === 'pass' && info\.sectionCompleted/, '段通关不得与 pop 叠加');
+  assert.match(APP, /if \(trans\.firstShown\) L\.markSectionSummarySeen/, '庆祝 seen 标记随进度保存');
+});
+
+test('GF1-I_progress_bar_gets_progressbar_aria_and_delayed_first_completion', () => {
+  assert.match(APP, /setAttribute\('role', 'progressbar'\)/);
+  assert.match(APP, /'aria-valuetext', '第 ' \+ sec\.section \+ ' 段，已完成 '/);
+  assert.match(APP, /transitionDelay = '120ms'/, '同段首次完成必须延迟 120ms 演化');
+  assert.match(APP, /barAnimNext/, '必须有「仅同段首次完成」标志');
+});
+
+test('GF1-J_last_section_next_action_has_no_empty_target', () => {
+  const fn = extractFn(APP, 'chooseNextAction');
+  assert.ok(fn, 'chooseNextAction 必须存在');
+  assert.match(fn, /hasUnfinishedQuestions\(\)/, '末段必须有未完成题兜底');
+  assert.match(fn, /pendingSummary && pendingSummary\.nextFirstQuestion/, '有真实下一段才指向下一段');
+  assert.doesNotMatch(fn, /nextFirstQuestion: null/, '不得留空目标');
 });
