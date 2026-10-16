@@ -285,3 +285,27 @@ test('approach_steps_are_clean_text_without_double_period', () => {
     res.lines.forEach((l) => assert.doesNotMatch(l, /。。/, id + ' 出现连续句号：' + l));
   }
 });
+
+test('approach_does_not_report_cte_names_as_tables', () => {
+  /* q100 用 WITH tp(t) AS (…) … FROM tp LEFT JOIN HR_EMPLOYEE：tp 不是表。 */
+  const q = PACK.questions.find((x) => x.id === 'q100');
+  const res = ask('解题思路', q);
+  const text = res.lines.join(' ');
+  assert.match(text, /HR_EMPLOYEE/, '应点名真实表');
+  assert.doesNotMatch(text, /落在\s+tp\b/, 'CTE 名 tp 不应被当成表');
+});
+
+test('approach_keeps_join_step_when_cte_join_present', () => {
+  const q = PACK.questions.find((x) => x.id === 'q100');
+  const res = ask('解题思路', q);
+  assert.ok(res.lines.join(' ').includes('JOIN'), '有 JOIN 的题应给连表提示');
+});
+
+test('approach_strips_recursive_cte_names_too', () => {
+  /* q115 用 WITH RECURSIVE m(ym) AS (…) , me AS (…)：m / me 都不是表。 */
+  const q = PACK.questions.find((x) => x.id === 'q115');
+  const res = ask('解题思路', q);
+  const text = res.lines.join(' ');
+  assert.match(text, /HR_EMPLOYEE/, '应点名真实表');
+  assert.doesNotMatch(text, /落在\s+(?:m|me)\s*[/，,]/i, '递归 CTE 名不应被当成表');
+});

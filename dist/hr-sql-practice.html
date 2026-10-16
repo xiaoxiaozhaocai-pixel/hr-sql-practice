@@ -3401,13 +3401,19 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       push('再拆步骤：取哪些列 → 从哪张表 → 要不要汇总，三步写完先跑一次。');
     } else {
       var tbls = sqlTables(ref);
+      /* CTE 名（WITH x AS (…)）不是表，报给用户会误导，剔掉。 */
+      var cteNames = [];
+      var cteRe = /(?:WITH(?:\s+RECURSIVE)?|,)\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^()]*\))?\s*AS\s*\(/gi;
+      var cm;
+      while ((cm = cteRe.exec(ref))) cteNames.push(String(cm[1]).toLowerCase());
+      tbls = tbls.filter(function (t) { return cteNames.indexOf(String(t).toLowerCase()) === -1; });
       var joins = countJoins(ref);
       var aggs = aggregatesIn(ref);
       push(tbls.length
         ? ('找数据来源：本题落在 ' + tbls.join(' / ') + (tbls.length > 1
           ? '；先确认它们的关联键（一般是 Code / ID 结尾的字段）能不能对上。' : '，单表取材即可。'))
         : '找数据来源：用表结构速查确认字段落在哪张表。');
-      if (joins > 0 && tbls.length > 1) {
+      if (joins > 0) {
         push('连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。');
       }
       if (aggs.length) {
