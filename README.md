@@ -175,6 +175,7 @@ dist/hr-sql-practice.html  构建产物（单文件，双击可跑）
 | `requirement` | string | ✔ | 任务与口径（必须无歧义） |
 | `output_hint` | string | ✔ | 要哪些列、是否排序、口径提示 |
 | `hint` | string \| string[] | — | **渐进提示**，不得含答案写法。字符串按换行拆条；数组则一条一条解锁 |
+| `approach` | string \| string[] | — | **可选：本题解题思路**——「先定产出 → 找表 → 连表 → 分层写 → 筛条件 → 自查」这类动作序列，**不含答案本身**。填了按它展示；不填由 `src/qa.js` 从 `output_hint` + `reference_sql` 结构派生 |
 | `reference_sql` | string | ✔ | SQL Server 权威写法（可含 `dbo.`），**只展示不执行** |
 | `reference_sql_sqlite` | string | — | SQLite 等价写法；与上文相同可省略 |
 | `expected.columns` | string[] | ✔ | 预期列名（仅展示与对账，判题不依赖列序） |
