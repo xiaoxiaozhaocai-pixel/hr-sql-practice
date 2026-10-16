@@ -605,11 +605,12 @@ pre {
           <div class="qa-body" id="qa-body" hidden="">
             <p class="qa-note">只答站内表结构 / 当前题 / 语法卡；答不上就明说，不编造。</p>
             <div class="qa-row">
-              <input id="qa-input" type="text" placeholder="如：实发、在职、NetPay、GROUP BY、考点、易错点" autocomplete="off"/>
+              <input id="qa-input" type="text" placeholder="如：解题思路、实发、在职、NetPay、GROUP BY、考点、易错点" autocomplete="off"/>
               <button id="qa-ask" type="button" class="btn primary sm">提问</button>
             </div>
             <div class="qa-chips" id="qa-chips">
               <button type="button" class="qa-chip" data-qa="考点">考点</button>
+              <button type="button" class="qa-chip" data-qa="解题思路">解题思路</button>
               <button type="button" class="qa-chip" data-qa="易错点">易错点</button>
               <button type="button" class="qa-chip" data-qa="涉及哪些表">涉及哪些表</button>
               <button type="button" class="qa-chip" data-qa="对比我的 SQL">对比我的 SQL</button>
@@ -3378,11 +3379,56 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
   function questionId(q) { return str(q && (q.id || q.seq)); }
 
+  /* 解题思路：从题面要求 + 参考 SQL 的结构特征，派生一条「动作序列」。
+     只讲先做什么 / 再做什么 / 怎么自查；不给答案、不报结果行数。
+     题目自带 approach（字符串或数组）时原样展示，便于后续逐题精修。 */
+  function approachLines(q) {
+    var preset = q.approach;
+    if (preset) {
+      var pl = (Array.isArray(preset) ? preset : [preset])
+        .map(function (x) { return str(x).trim(); })
+        .filter(function (x) { return x.length > 0; });
+      if (pl.length) return pl;
+    }
+    var ref = str(q.reference_sql_sqlite || q.reference_sql || '');
+    var marks = ['①', '②', '③', '④', '⑤', '⑥', '⑦'];
+    var steps = [];
+    function push(t) { steps.push((marks[steps.length] || '·') + ' ' + t); }
+    push('先定产出：' + (str(q.output_hint).trim() || str(q.requirement).trim() ||
+      '读题面「要求」与「输出」两句，把要交的列和粒度定下来') + '。');
+    if (!ref) {
+      push('再拆步骤：取哪些列 → 从哪张表 → 要不要汇总，三步写完先跑一次。');
+    } else {
+      var tbls = sqlTables(ref);
+      var joins = countJoins(ref);
+      var aggs = aggregatesIn(ref);
+      push(tbls.length
+        ? ('找数据来源：本题落在 ' + tbls.join(' / ') + (tbls.length > 1
+          ? '；先确认它们的关联键（一般是 Code / ID 结尾的字段）能不能对上。' : '，单表取材即可。'))
+        : '找数据来源：用表结构速查确认字段落在哪张表。');
+      if (joins > 0 && tbls.length > 1) {
+        push('连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。');
+      }
+      if (aggs.length) {
+        push('分层写：先写明细 SELECT，用 WHERE 把范围筛准；再套 ' + aggs.join(' / ') +
+          (/GROUP\s+BY/i.test(ref) ? ' 并按分组字段 GROUP BY 收成汇总' : ' 收成一行结果') + '。');
+      } else {
+        push('直接写明细：本题不需要聚合，按要交的列逐个取，别多带列。');
+      }
+      if (/\bWHERE\b/i.test(ref)) push('筛条件：把题面里的限定词（在职 / 某年 / 某类）逐条翻成 WHERE 条件，加一条就跑一次看结果变化。');
+      if (/\bHAVING\b/i.test(ref)) push('筛聚合：对聚合结果的过滤要写进 HAVING，不能写进 WHERE。');
+      if (/\bORDER\s+BY\b/i.test(ref)) push('排序：按题面要求的字段 ORDER BY；题面没提顺序时判题按行集合比，顺序不影响对错。');
+    }
+    push('自查：跑一次，看列数与题面「输出」要求对不对得上；再点「对比我的 SQL」看结构差在哪、「易错点」看本题坑。');
+    return steps;
+  }
+
   /* 当前题意图词 -> 答哪一块。 */
   var Q_INTENT = [
     [/考点|知识点|考什么|考哪些|knowledge/i, 'kp'],
     [/易错|坑|陷阱|pitfall|注意什么/i, 'pitfalls'],
-    [/提示|hint|思路|怎么写/i, 'hint'],
+    [/解题|思路|怎么解|怎么做|怎么下手|从哪下手|步骤|approach/i, 'approach'],
+    [/提示|hint|怎么写/i, 'hint'],
     [/方言|dialect/i, 'dialect'],
     [/要求|任务|做什么|输出什么|题目要求/i, 'task'],
     [/涉及|用到|哪些表|用哪些表/i, 'tables']
@@ -3402,6 +3448,10 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
       var ps = Array.isArray(q.pitfalls) ? q.pitfalls : [];
       if (!ps.length) return hit('question', '本题易错点', ['本题未登记易错点。'], src, null);
       return hit('question', '本题易错点', ps.slice(), src, null);
+    }
+    if (intent === 'approach') {
+      return hit('question', '本题解题思路', approachLines(q), src,
+        '这是解题顺序，不是答案本身；具体写法自己拿主意，写完可用「对比我的 SQL」自查。');
     }
     if (intent === 'hint') {
       var h = q.hint;

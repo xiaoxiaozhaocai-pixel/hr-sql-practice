@@ -225,6 +225,26 @@ test('syntax_card_hit_returns_source_of_card', () => {
   assert.match(res.source, /语法卡/);
 });
 
+test('question_context_answers_approach_as_action_sequence', () => {
+  const res = ask('解题思路', Q001);
+  assert.equal(res.ok, true);
+  assert.equal(res.kind, 'question');
+  assert.match(res.title, /解题思路/);
+  assert.match(res.source, /q001/);
+  assert.ok(res.lines.length >= 3, '应给出多步动作序列，实得 ' + res.lines.length);
+  const text = res.lines.join(' ');
+  assert.ok(text.includes('HR_EMPLOYEE'), '应点名本题涉及的表');
+  assert.doesNotMatch(text, /共\s*\d+\s*行/, '不得报结果行数');
+  assert.doesNotMatch(text, /正确答案/, '不得泄露答案');
+});
+
+test('approach_intent_does_not_leak_into_hint', () => {
+  const ap = ask('思路', Q001);
+  assert.equal(ap.title, '本题解题思路');
+  const hint = ask('提示', Q001);
+  assert.equal(hint.title, '本题提示');
+});
+
 /* ---- 面板接入（静态核对：node 里没有 DOM，这里只查接线是否存在） ---- */
 
 const HTML = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
@@ -247,4 +267,10 @@ test('qa_placeholder_and_build_injection_present', () => {
   assert.ok(APP_SRC.includes('window.HRQa'));
   assert.ok(APP_SRC.includes('function qaSetOpen'));
   assert.ok(APP_SRC.includes("qaToggle.addEventListener('keydown'"));
+});
+
+test('approach_chip_is_wired_into_qa_chips_row', () => {
+  assert.equal(HTML.split('data-qa="解题思路"').length - 1, 1, '「解题思路」chip 应恰好 1 个');
+  assert.equal((HTML.match(/class="qa-chip"/g) || []).length, 5, 'qa-chips 行应有 5 个 chip');
+  assert.match(HTML, /id="qa-input"[^>]*placeholder="[^"]*解题思路/);
 });
