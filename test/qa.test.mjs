@@ -274,3 +274,14 @@ test('approach_chip_is_wired_into_qa_chips_row', () => {
   assert.equal((HTML.match(/class="qa-chip"/g) || []).length, 5, 'qa-chips 行应有 5 个 chip');
   assert.match(HTML, /id="qa-input"[^>]*placeholder="[^"]*解题思路/);
 });
+
+test('approach_steps_are_clean_text_without_double_period', () => {
+  /* 题面 output_hint 自带宽句号，拼接时若再补一个会出「。。」，读起来毛糙。 */
+  for (const id of ['q001', 'q042', 'q120']) {
+    const q = PACK.questions.find((x) => x.id === id);
+    assert.ok(q, id + ' 应存在于题库');
+    const res = ask('解题思路', q);
+    assert.ok(res.lines.length >= 3, id + ' 应给出多步动作序列');
+    res.lines.forEach((l) => assert.doesNotMatch(l, /。。/, id + ' 出现连续句号：' + l));
+  }
+});

@@ -438,8 +438,9 @@
     var marks = ['①', '②', '③', '④', '⑤', '⑥', '⑦'];
     var steps = [];
     function push(t) { steps.push((marks[steps.length] || '·') + ' ' + t); }
-    push('先定产出：' + (str(q.output_hint).trim() || str(q.requirement).trim() ||
-      '读题面「要求」与「输出」两句，把要交的列和粒度定下来') + '。');
+    function endDot(s) { return /[。！？.；;]$/.test(s) ? s : s + '。'; }
+    push('先定产出：' + endDot(str(q.output_hint).trim() || str(q.requirement).trim() ||
+      '读题面「要求」与「输出」两句，把要交的列和粒度定下来'));
     if (!ref) {
       push('再拆步骤：取哪些列 → 从哪张表 → 要不要汇总，三步写完先跑一次。');
     } else {
