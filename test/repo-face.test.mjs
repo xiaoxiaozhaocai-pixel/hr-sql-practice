@@ -107,3 +107,19 @@ test('product_has_no_external_resource_requests', () => {
     assert.ok(!re.test(product), `产物不得有外链资源：${name}`);
   }
 });
+
+/* 2026-10-17 补：在线入口标签页文案守门。
+ * 背景：10-10 v6 曾把部署目录的 title 从「离线单文件」改成「题库 v1.0」，
+ * 但当时只改了部署产物、源码 src/index.html 未同步，回灌后又退回旧文案。
+ * 教训＝同一件事只许一个来源：title 只能来自 src/index.html，且必须与页面 brand 一致。 */
+test('product_title_is_online_facing_and_matches_brand', () => {
+  const srcTitle = (read('src/index.html').match(/<title>([^<]*)<\/title>/i) || [])[1];
+  const distTitle = (product.match(/<title>([^<]*)<\/title>/i) || [])[1];
+  assert.ok(srcTitle, 'src/index.html 应有 title');
+  assert.equal(distTitle, srcTitle, '产物 title 必须与源码一致（build.mjs 不得改写 title）');
+  assert.ok(!/离线单文件/.test(srcTitle), `在线入口标签页不得出现「离线单文件」：${srcTitle}`);
+
+  const brand = (read('src/index.html').match(/<div class="brand">([^<]*)/i) || [])[1];
+  assert.ok(brand, '页内应有 brand 文案');
+  assert.ok(srcTitle.startsWith(brand.trim()), `title 应以页内 brand 开头，brand=${brand}，title=${srcTitle}`);
+});
