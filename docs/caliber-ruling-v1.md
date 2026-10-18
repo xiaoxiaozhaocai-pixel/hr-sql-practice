@@ -54,6 +54,32 @@
 - `output_hint` 的列名要求属**教学提示**，**不进判题**。
 - 工程侧实现无需改动（现有判题引擎与裁定 6 一致）。
 
+## 裁定 7 · 语法卡条数：**41 条**（2026-10-18）
+
+业务 v2 清单正文记「33 条」，工程侧实读 `data/questions.json` 为 **37 题 / 41 张卡 / 41 个不重复语法名**（`node` 实测，非推断）。
+
+- 按裁定 5 的同一原则（登记值不改实测），**以 41 条为准**，不硬凑 33。
+- 「33」在业务件正文里找不到可对应行数，判定为登记笔误，不再等业务二次确认。
+- 后续若业务方补出 33 行的具体出处，按新证据重开此条，在此之前 41 条为唯一口径。
+
+## 裁定 7 附表 · 复核命令
+
+```
+node -e "const q=require('./data/questions.json');const a=Array.isArray(q)?q:(q.questions||q.items||[]);let n=0,c=0;const s=new Set();for(const x of a){const v=x.syntax_intro;if(Array.isArray(v)&&v.length){n++;c+=v.length;v.forEach(k=>s.add(k.syntax||k.name))}}console.log(n,c,s.size)"
+```
+→ `37 41 41`
+
+## 裁定 8 · 判题「列名/列序对齐」分支：**保留，不删**（2026-10-18）
+
+工程侧曾被要求「清理判题代码里残留的列名归一化比较分支（哪怕死代码）」。**实测该前置不成立，裁定保留。**
+
+- 该分支不是死代码，是裁定 6「列序不敏感」的实现载体：`src/judge.js` 的 `buildNamePermutation()` / `applyPermutation()` 用在 `judgeResult()` 的 `nameEq` 上，而 `verdict.pass = nameEq || posEq`。删掉即等于「列序不同判错」，与裁定 6 直接冲突。
+- 另有 `namesSetEqual()` 只喂 `columnIssue` 提示、**不参与通过与否**，也非死代码（有断言 `columnIssue` 非空的用例）。
+- 验收用例（`test/judge.test.mjs`，两条硬断言，删分支必红）：
+  - L54–56 列名不同但列序一致 → `pass=true` / `alignMode='position'` / `columnIssue` 非空
+  - L63–64 列序不同但列名可匹配 → `alignMode='name'` / `columnIssue=null`
+- 结论：分支**在用**、有独立用例、与裁定 6 同向。「避免死代码」的动机可成立，但对象不是这段代码。
+
 ## 待议（不在本次范围）
 
 - `HR_JOB` 中 J004 / J005 / J017 / J018 未被任职表引用（0 条），"岗位名称大小写不一致"这个坑在**现职数据里不显现**，前 20 题不出。若要练它，需在造数脚本里补任职引用——**改数据要先经主人同意**，记为待议项。
