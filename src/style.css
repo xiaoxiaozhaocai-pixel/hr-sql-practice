@@ -468,3 +468,18 @@ pre {
   .tablewrap { overflow-x: auto; }
   .actions .hint { margin-left: 0; flex: 1 1 100%; }
 }
+
+/* T22 学情诊断：学习记录面板内的只读汇总块。 */
+.record-diagnose {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  line-height: 1.65;
+  color: #6b6b6b;
+}
+.record-diagnose-line { margin: 0; }
+.record-diagnose-overview { color: #3d3d3d; font-weight: 600; }
+.record-diagnose-sections,
+.record-diagnose-syntax,
+.record-diagnose-plan { margin-top: 6px; }

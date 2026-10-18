@@ -678,6 +678,58 @@
     renderTodayGroup();
   }
 
+  /* 学情诊断：只读汇总学习记录，不参与判题、不改题库与段进度口径。 */
+  function renderDiagnose() {
+    var box = $('record-diagnose');
+    if (!box) return;
+    var D = window.HRDiagnose;
+    var report = (D && typeof D.diagnose === 'function' && state && state.learning)
+      ? D.diagnose({ questions: QUESTIONS, learning: state.learning }, { today: L.todayStamp() })
+      : null;
+    if (!report || !report.ready) {
+      box.hidden = true;
+      box.textContent = '';
+      return;
+    }
+    box.hidden = false;
+    box.textContent = '';
+
+    var o = report.overall;
+    box.appendChild(el('div',
+      '已完成 ' + o.completed + '/' + o.total + ' · 独立完成 ' + o.independent +
+      ' · 待修正 ' + o.needsFix + ' · 到期复查 ' + o.due,
+      'record-diagnose-line record-diagnose-overview'));
+
+    var sectionBox = el('div', null, 'record-diagnose-sections');
+    report.sections.forEach(function (s) {
+      sectionBox.appendChild(el('div',
+        '第 ' + s.section + ' 段 已完成 ' + s.completed + '/' + s.total +
+        ' · 独立 ' + s.independent + ' · 掌握率 ' + Math.round(s.masteryRate * 100) + '%',
+        'record-diagnose-line'));
+    });
+    box.appendChild(sectionBox);
+
+    if (report.syntax.length > 0) {
+      var syntaxBox = el('div', null, 'record-diagnose-syntax');
+      report.syntax.slice(0, 5).forEach(function (sx) {
+        syntaxBox.appendChild(el('div',
+          sx.name + ' · 覆盖 ' + sx.total + ' 题 · 掌握率 ' + Math.round(sx.masteryRate * 100) + '%',
+          'record-diagnose-line'));
+      });
+      box.appendChild(syntaxBox);
+    }
+
+    if (report.plan.length > 0) {
+      var planBox = el('div', null, 'record-diagnose-plan');
+      report.plan.forEach(function (p) {
+        planBox.appendChild(el('div',
+          '#' + p.seq + ' ' + p.title + ' · ' + p.reason,
+          'record-diagnose-line'));
+      });
+      box.appendChild(planBox);
+    }
+  }
+
   /* ------------------------------ 左栏题号列表 ------------------------------ */
   function questionMatches(q) {
     var kw = String(filter.kw || '').trim().toLowerCase();
@@ -2282,6 +2334,7 @@
       if (recPanel) recPanel.hidden = !on;
       if (recBtn) recBtn.setAttribute('aria-expanded', String(!!on));
       if (on) renderStats();
+      if (on) renderDiagnose();
     }
     if (recBtn) {
       recBtn.addEventListener('click', function (e) {
