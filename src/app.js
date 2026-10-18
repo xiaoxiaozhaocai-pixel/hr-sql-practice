@@ -722,9 +722,20 @@
     if (report.plan.length > 0) {
       var planBox = el('div', null, 'record-diagnose-plan');
       report.plan.forEach(function (p) {
-        planBox.appendChild(el('div',
+        /* T23：下一步可点，点了直接跳到那道题。
+           诊断本身仍是只读的：跳转不改判题、不改题库、不改任何学习记录。 */
+        var go = el('button',
           '#' + p.seq + ' ' + p.title + ' · ' + p.reason,
-          'record-diagnose-line'));
+          'record-diagnose-line record-diagnose-go');
+        go.type = 'button';
+        go.setAttribute('data-qid', p.id);
+        go.addEventListener('click', function () {
+          var closer = $('record-close');
+          if (closer) closer.click();   /* 复用收起逻辑：同步 aria-expanded 与焦点 */
+          jumpToQuestion(p.id);
+          announce('已跳到 #' + p.seq + '。');
+        });
+        planBox.appendChild(go);
       });
       box.appendChild(planBox);
     }
