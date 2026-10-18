@@ -113,6 +113,26 @@ test('same_syntax_two_questions_mastery_half', () => {
   assert.equal(report.syntax[0].masteryRate, 0.5);
 });
 
+test('started_syntax_ranks_before_untouched', () => {
+  // 只做了最后一道题（语法点 Z），前面三个语法点都没碰过。
+  // 期望：已练过的 Z 排第一，不能被「未练 0%」挤到后面。
+  const questions = [
+    q('q1', 1, 1, 'A', ['AAA']),
+    q('q2', 2, 1, 'B', ['BBB']),
+    q('q3', 3, 1, 'C', ['CCC']),
+    q('q4', 4, 1, 'D', ['ZZZ'])
+  ];
+  const learning = { completions: { q4: { completionType: 'independent' } } };
+  const report = diagnose({ questions, learning }, { today: TODAY });
+  assert.equal(report.syntax.length, 4);
+  assert.equal(report.syntax[0].name, 'ZZZ');
+  assert.equal(report.syntax[0].masteryRate, 1);
+  assert.deepEqual(
+    report.syntax.slice(1).map((s) => s.name).sort(),
+    ['AAA', 'BBB', 'CCC']
+  );
+});
+
 test('no_syntax_intro_gives_empty_syntax_and_coverage_note', () => {
   const questions = [q('q1', 1, 1), q('q2', 2, 1), q('q3', 3, 2)];
   const report = diagnose({ questions, learning: {} }, { today: TODAY });

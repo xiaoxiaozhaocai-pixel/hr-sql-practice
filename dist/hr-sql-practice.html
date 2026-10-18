@@ -3803,7 +3803,18 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     }).filter(function (sx) {
       return sx.total > 0;
     }).sort(function (a, b) {
-      if (a.masteryRate !== b.masteryRate) return a.masteryRate - b.masteryRate;
+      /* 已练过（有完成记录）的语法点优先：否则刚练的那一个会被一堆「还没碰过」的 0% 挤出前列。
+         已练区内：有错的最前 → 掌握率低的在前 → 完成题数多的在前；
+         未练区：覆盖题数多的在前，同值按题库顺序（sort 稳定）。 */
+      var aStarted = a.completed > 0 ? 1 : 0;
+      var bStarted = b.completed > 0 ? 1 : 0;
+      if (aStarted !== bStarted) return bStarted - aStarted;
+      if (aStarted) {
+        if (a.needsFix !== b.needsFix) return b.needsFix - a.needsFix;
+        if (a.masteryRate !== b.masteryRate) return a.masteryRate - b.masteryRate;
+        if (a.completed !== b.completed) return b.completed - a.completed;
+        return 0;
+      }
       return b.total - a.total;
     });
 
