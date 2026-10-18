@@ -3430,8 +3430,15 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     var steps = [];
     function push(t) { steps.push((marks[steps.length] || '·') + ' ' + t); }
     function endDot(s) { return /[。！？.；;]$/.test(s) ? s : s + '。'; }
-    push('先定产出：' + endDot(str(q.output_hint).trim() || str(q.requirement).trim() ||
-      '读题面「要求」与「输出」两句，把要交的列和粒度定下来'));
+    /* 产出句里常夹带「，按 X 升序 / 按 X 降序」这类排序说明。
+       下面会单独派生一条「排序」动作，不剥掉的话同一件事要说两遍。 */
+    function stripOrderTail(t) {
+      return String(t).replace(/[,，;；]\s*按[^,，;；。]*?(?:升序|降序)[^。]*[。]?\s*$/, '').trim();
+    }
+    var outText = str(q.output_hint).trim() || str(q.requirement).trim() ||
+      '读题面「要求」与「输出」两句，把要交的列和粒度定下来';
+    if (ref && /\bORDER\s+BY\b/i.test(ref)) outText = stripOrderTail(outText) || outText;
+    push('先定产出：' + endDot(outText));
     if (!ref) {
       push('再拆步骤：取哪些列 → 从哪张表 → 要不要汇总，三步写完先跑一次。');
     } else {
@@ -3449,7 +3456,11 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
           ? '；先确认它们的关联键（一般是 Code / ID 结尾的字段）能不能对上。' : '，单表取材即可。'))
         : '找数据来源：用表结构速查确认字段落在哪张表。');
       if (joins > 0) {
-        push('连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。');
+        /* 只看得到一张表却提示「一个一个补 JOIN」，会和上面「单表取材即可」打脸。
+           这种题的 JOIN 实际接的是子查询 / 固定清单（时点表、月份表），换个说法。 */
+        push(tbls.length > 1
+          ? '连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。'
+          : '连表：要先有一张跑得通的主查询，再把 JOIN 的子查询 / 固定清单（如时点表、月份表）拼上去；每加一块就跑一次，看行数有没有意外放大。');
       }
       if (aggs.length) {
         push('分层写：先写明细 SELECT，用 WHERE 把范围筛准；再套 ' + aggs.join(' / ') +
@@ -3622,7 +3633,9 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
     buildIndex: buildIndex,
     ask: ask,
     explainSqliteError: explainSqliteError,
-    compareToReference: compareToReference
+    compareToReference: compareToReference,
+    /* 供 app.js 取「起手一步」用：无草稿的题把第 1 步当编辑器占位提示。 */
+    approachLines: approachLines
   };
 });
 
@@ -4649,10 +4662,16 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
     var sectionBox = el('div', null, 'record-diagnose-sections');
     report.sections.forEach(function (s) {
+      /* T24 同族：段列表此前每行一个模样，看不出这段是练过的还是没碰过的。
+         练过的写「已练 c/t」并深一档，没碰过的写「待练 t」。
+         仍只读：不改判题、不改题库、不改学习记录。 */
+      var secStarted = s.completed > 0;
       sectionBox.appendChild(el('div',
-        '第 ' + s.section + ' 段 已完成 ' + s.completed + '/' + s.total +
-        ' · 独立 ' + s.independent + ' · 掌握率 ' + Math.round(s.masteryRate * 100) + '%',
-        'record-diagnose-line'));
+        secStarted
+          ? '第 ' + s.section + ' 段 已练 ' + s.completed + '/' + s.total +
+            ' · 独立 ' + s.independent + ' · 掌握率 ' + Math.round(s.masteryRate * 100) + '%'
+          : '第 ' + s.section + ' 段 待练 ' + s.total + ' 题',
+        'record-diagnose-line' + (secStarted ? ' record-diagnose-started' : '')));
     });
     box.appendChild(sectionBox);
 
@@ -5340,6 +5359,23 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
   }
 
   /* ------------------------------ 单关渲染 ------------------------------ */
+  /* 编辑器原有占位文案（与 index.html 的 textarea#sql-input 保持一致）。 */
+  var SQL_PLACEHOLDER_DEFAULT = '在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;';
+
+  /* 跳到「从没写过草稿」的题时，编辑器是全空的，光写「在此写 SELECT」等于没说。
+     这里用本题「解题思路」的第 1 步当占位提示：只指方向，不预填任何 SQL、
+     不写进 value，因此不参与判题，也不改变「尚未作答」的状态。 */
+  function starterPlaceholder(q) {
+    var first = '';
+    try {
+      var lines = (QA.approachLines && QA.approachLines(q)) || [];
+      first = lines.length ? String(lines[0]).replace(/^[①②③④⑤⑥⑦]\s*/, '').trim() : '';
+    } catch (e) { first = ''; }
+    if (!first) return SQL_PLACEHOLDER_DEFAULT;
+    if (first.length > 46) first = first.slice(0, 45) + '…';
+    return '从这开始：' + first;
+  }
+
   function renderDetail() {
     var q = currentQuestion();
     show($('detail-empty'), !q);
@@ -5399,6 +5435,7 @@ window.HR_BOOT = {"baselineDate":"2026-06-30","schemaVersion":"1.0","questionDb"
 
     var sqlInput = $('sql-input');
     sqlInput.value = state.sql[q.id] || '';
+    sqlInput.placeholder = sqlInput.value ? SQL_PLACEHOLDER_DEFAULT : starterPlaceholder(q);
     checkForbidden();
 
     renderHints(q);

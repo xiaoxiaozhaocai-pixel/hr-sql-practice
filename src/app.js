@@ -702,10 +702,16 @@
 
     var sectionBox = el('div', null, 'record-diagnose-sections');
     report.sections.forEach(function (s) {
+      /* T24 同族：段列表此前每行一个模样，看不出这段是练过的还是没碰过的。
+         练过的写「已练 c/t」并深一档，没碰过的写「待练 t」。
+         仍只读：不改判题、不改题库、不改学习记录。 */
+      var secStarted = s.completed > 0;
       sectionBox.appendChild(el('div',
-        '第 ' + s.section + ' 段 已完成 ' + s.completed + '/' + s.total +
-        ' · 独立 ' + s.independent + ' · 掌握率 ' + Math.round(s.masteryRate * 100) + '%',
-        'record-diagnose-line'));
+        secStarted
+          ? '第 ' + s.section + ' 段 已练 ' + s.completed + '/' + s.total +
+            ' · 独立 ' + s.independent + ' · 掌握率 ' + Math.round(s.masteryRate * 100) + '%'
+          : '第 ' + s.section + ' 段 待练 ' + s.total + ' 题',
+        'record-diagnose-line' + (secStarted ? ' record-diagnose-started' : '')));
     });
     box.appendChild(sectionBox);
 
@@ -1393,6 +1399,23 @@
   }
 
   /* ------------------------------ 单关渲染 ------------------------------ */
+  /* 编辑器原有占位文案（与 index.html 的 textarea#sql-input 保持一致）。 */
+  var SQL_PLACEHOLDER_DEFAULT = '在此写 SELECT 语句，例如：SELECT COUNT(*) FROM HR_EMPLOYEE;';
+
+  /* 跳到「从没写过草稿」的题时，编辑器是全空的，光写「在此写 SELECT」等于没说。
+     这里用本题「解题思路」的第 1 步当占位提示：只指方向，不预填任何 SQL、
+     不写进 value，因此不参与判题，也不改变「尚未作答」的状态。 */
+  function starterPlaceholder(q) {
+    var first = '';
+    try {
+      var lines = (QA.approachLines && QA.approachLines(q)) || [];
+      first = lines.length ? String(lines[0]).replace(/^[①②③④⑤⑥⑦]\s*/, '').trim() : '';
+    } catch (e) { first = ''; }
+    if (!first) return SQL_PLACEHOLDER_DEFAULT;
+    if (first.length > 46) first = first.slice(0, 45) + '…';
+    return '从这开始：' + first;
+  }
+
   function renderDetail() {
     var q = currentQuestion();
     show($('detail-empty'), !q);
@@ -1452,6 +1475,7 @@
 
     var sqlInput = $('sql-input');
     sqlInput.value = state.sql[q.id] || '';
+    sqlInput.placeholder = sqlInput.value ? SQL_PLACEHOLDER_DEFAULT : starterPlaceholder(q);
     checkForbidden();
 
     renderHints(q);

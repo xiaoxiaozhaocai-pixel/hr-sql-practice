@@ -439,8 +439,15 @@
     var steps = [];
     function push(t) { steps.push((marks[steps.length] || '·') + ' ' + t); }
     function endDot(s) { return /[。！？.；;]$/.test(s) ? s : s + '。'; }
-    push('先定产出：' + endDot(str(q.output_hint).trim() || str(q.requirement).trim() ||
-      '读题面「要求」与「输出」两句，把要交的列和粒度定下来'));
+    /* 产出句里常夹带「，按 X 升序 / 按 X 降序」这类排序说明。
+       下面会单独派生一条「排序」动作，不剥掉的话同一件事要说两遍。 */
+    function stripOrderTail(t) {
+      return String(t).replace(/[,，;；]\s*按[^,，;；。]*?(?:升序|降序)[^。]*[。]?\s*$/, '').trim();
+    }
+    var outText = str(q.output_hint).trim() || str(q.requirement).trim() ||
+      '读题面「要求」与「输出」两句，把要交的列和粒度定下来';
+    if (ref && /\bORDER\s+BY\b/i.test(ref)) outText = stripOrderTail(outText) || outText;
+    push('先定产出：' + endDot(outText));
     if (!ref) {
       push('再拆步骤：取哪些列 → 从哪张表 → 要不要汇总，三步写完先跑一次。');
     } else {
@@ -458,7 +465,11 @@
           ? '；先确认它们的关联键（一般是 Code / ID 结尾的字段）能不能对上。' : '，单表取材即可。'))
         : '找数据来源：用表结构速查确认字段落在哪张表。');
       if (joins > 0) {
-        push('连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。');
+        /* 只看得到一张表却提示「一个一个补 JOIN」，会和上面「单表取材即可」打脸。
+           这种题的 JOIN 实际接的是子查询 / 固定清单（时点表、月份表），换个说法。 */
+        push(tbls.length > 1
+          ? '连表：先把主表写出来跑通，再一个一个补 JOIN；每加一个 JOIN 就跑一次，看行数有没有意外放大。'
+          : '连表：要先有一张跑得通的主查询，再把 JOIN 的子查询 / 固定清单（如时点表、月份表）拼上去；每加一块就跑一次，看行数有没有意外放大。');
       }
       if (aggs.length) {
         push('分层写：先写明细 SELECT，用 WHERE 把范围筛准；再套 ' + aggs.join(' / ') +
@@ -631,6 +642,8 @@
     buildIndex: buildIndex,
     ask: ask,
     explainSqliteError: explainSqliteError,
-    compareToReference: compareToReference
+    compareToReference: compareToReference,
+    /* 供 app.js 取「起手一步」用：无草稿的题把第 1 步当编辑器占位提示。 */
+    approachLines: approachLines
   };
 });
