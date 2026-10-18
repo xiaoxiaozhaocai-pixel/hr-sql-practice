@@ -13,7 +13,8 @@
  *   - guided      = completions[id].completionType === 'guided'
  *   - unknown / 缺失 completionType → 计入 completed，不计 independent / guided
  *   - needsFix    = review[id].status === 'needsFix'
- *   - due         = review[id].status === 'due'
+ *   - due         = review[id].status === 'due' 且 dueDay 非空、不晚于 today
+ *                   （与计划里「到期复查」同条件，避免面板数字与下一步条目打架）
  *   - activeDays  = learning.activity.activeDays（缺失按 0）
  *   - rate        = completed / total；masteryRate = independent / total；total=0 时为 0
  */
@@ -135,7 +136,10 @@
       if (type === 'independent') overall.independent += 1;
       if (type === 'guided') overall.guided += 1;
       if (rvStatus === 'needsFix') overall.needsFix += 1;
-      if (rvStatus === 'due') overall.due += 1;
+      if (rvStatus === 'due') {
+        var rvDueDay = dueValue(q);
+        if (rvDueDay !== null && today && rvDueDay <= today) overall.due += 1;
+      }
 
       /* 段：按题目 section 聚合，最后按 section 升序输出。 */
       var secKey = str(q.section);
