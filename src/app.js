@@ -712,9 +712,16 @@
     if (report.syntax.length > 0) {
       var syntaxBox = el('div', null, 'record-diagnose-syntax');
       report.syntax.slice(0, 5).forEach(function (sx) {
+        /* T24：排序已经把练过的顶到前面，但读起来还分不出哪行是刚练的、哪行没碰过。
+           练过的写「已练 c/t」，没碰过的写「待练 t」，并用 class 让练过的深一档。
+           仍只读：不改判题、不改题库、不改学习记录。 */
+        var started = sx.completed > 0;
         syntaxBox.appendChild(el('div',
-          sx.name + ' · 覆盖 ' + sx.total + ' 题 · 掌握率 ' + Math.round(sx.masteryRate * 100) + '%',
-          'record-diagnose-line'));
+          started
+            ? sx.name + ' · 已练 ' + sx.completed + '/' + sx.total + ' 题 · 掌握率 ' +
+              Math.round(sx.masteryRate * 100) + '%'
+            : sx.name + ' · 待练 ' + sx.total + ' 题',
+          'record-diagnose-line' + (started ? ' record-diagnose-started' : '')));
       });
       box.appendChild(syntaxBox);
     }
